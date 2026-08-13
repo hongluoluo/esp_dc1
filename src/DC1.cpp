@@ -186,17 +186,23 @@ void DC1::mqttDiscovery(bool isEnable)
             powerStatTopic[strlen(powerStatTopic) - 1] = ch + 49; // 48 + 1 + ch
             sprintf(message,
                     PSTR("{\"name\":\"%s_%d\","
+                         "\"uniq_id\":\"%s_%d\","
                          "\"cmd_t\":\"%s\","
                          "\"stat_t\":\"%s\","
                          "\"pl_off\":\"off\","
                          "\"pl_on\":\"on\","
                          "\"avty_t\":\"%s\","
                          "\"pl_avail\":\"online\","
-                         "\"pl_not_avail\":\"offline\"}"),
+                         "\"pl_not_avail\":\"offline\","
+                         "\"device\":{\"identifiers\":[\"%s\"],\"name\":\"%s\",\"manufacturer\":\"Phicomm\",\"model\":\"DC1\",\"sw_version\":\"%s\"}}"),
+                    UID, (ch + 1),
                     UID, (ch + 1),
                     cmndTopic,
                     powerStatTopic,
-                    availability.c_str());
+                    availability.c_str(),
+                    UID,
+                    module->getModuleCNName().c_str(),
+                    module->getModuleVersion().c_str());
             Mqtt::publish(topic, message, true);
             //Debug::AddInfo(PSTR("discovery: %s - %s"), topic, message);
         }
@@ -219,17 +225,33 @@ void DC1::mqttDiscovery(bool isEnable)
                 sprintf(message,
                         PSTR("{\"name\":\"%s_%s\","
                              "\"stat_t\":\"%s\","
-                             "\"val_tpl\":\"{{value_json.%s}}\"}"),
-                        UID, tims[i].c_str(), energy.c_str(), tims[i].c_str());
+                             "\"uniq_id\":\"%s_%s\","
+                             "\"val_tpl\":\"{{value_json.%s}}\","
+                             "\"device\":{\"identifiers\":[\"%s\"],\"name\":\"%s\",\"manufacturer\":\"Phicomm\",\"model\":\"DC1\",\"sw_version\":\"%s\"}}"),
+                        UID, tims[i].c_str(),
+                        energy.c_str(),
+                        UID, tims[i].c_str(),
+                        tims[i].c_str(),
+                        UID,
+                        module->getModuleCNName().c_str(),
+                        module->getModuleVersion().c_str());
             }
             else
             {
                 sprintf(message,
                         PSTR("{\"name\":\"%s_%s\","
                              "\"stat_t\":\"%s\","
+                             "\"uniq_id\":\"%s_%s\","
                              "\"val_tpl\":\"{{value_json.%s}}\","
-                             "\"unit_of_meas\":\"%s\"}"),
-                        UID, tims[i].c_str(), energy.c_str(), tims[i].c_str(), tims2[i].c_str());
+                             "\"unit_of_meas\":\"%s\","
+                             "\"device\":{\"identifiers\":[\"%s\"],\"name\":\"%s\",\"manufacturer\":\"Phicomm\",\"model\":\"DC1\",\"sw_version\":\"%s\"}}"),
+                        UID, tims[i].c_str(),
+                        energy.c_str(),
+                        UID, tims[i].c_str(),
+                        tims[i].c_str(), tims2[i].c_str(),
+                        UID,
+                        module->getModuleCNName().c_str(),
+                        module->getModuleVersion().c_str());
             }
             Mqtt::publish(topic, message, true);
             //Debug::AddInfo(PSTR("discovery: %s - %s"), topic, message);
@@ -448,6 +470,7 @@ void DC1::httpHa(ESP8266WebServer *server)
         snprintf_P(tmpData, sizeof(tmpData),
                    PSTR("  - platform: mqtt\r\n"
                         "    name: \"%s_%d\"\r\n"
+                        "    unique_id: \"%s_%d\"\r\n"
                         "    state_topic: \"%s\"\r\n"
                         "    command_topic: \"%s\"\r\n"
                         "    payload_on: \"on\"\r\n"
@@ -455,7 +478,9 @@ void DC1::httpHa(ESP8266WebServer *server)
                         "    availability_topic: \"%s\"\r\n"
                         "    payload_available: \"online\"\r\n"
                         "    payload_not_available: \"offline\"\r\n\r\n"),
-                   UID, ch + 1, powerStatTopic, cmndTopic, availability.c_str());
+                   UID, ch + 1,
+                   UID, ch + 1,
+                   powerStatTopic, cmndTopic, availability.c_str());
         server->sendContent_P(tmpData);
     }
 
@@ -469,19 +494,25 @@ void DC1::httpHa(ESP8266WebServer *server)
             snprintf_P(tmpData, sizeof(tmpData),
                        PSTR("  - platform: mqtt\r\n"
                             "    name: \"%s_%s\"\r\n"
+                            "    unique_id: \"%s_%s\"\r\n"
                             "    state_topic: \"%s\"\r\n"
                             "    value_template: \"{{value_json.%s}}\"\r\n\r\n"),
-                       UID, tims[i].c_str(), energyTeleTopic, tims[i].c_str());
+                       UID, tims[i].c_str(),
+                       UID, tims[i].c_str(),
+                       energyTeleTopic, tims[i].c_str());
         }
         else
         {
             snprintf_P(tmpData, sizeof(tmpData),
                        PSTR("  - platform: mqtt\r\n"
                             "    name: \"%s_%s\"\r\n"
+                            "    unique_id: \"%s_%s\"\r\n"
                             "    state_topic: \"%s\"\r\n"
                             "    value_template: \"{{value_json.%s}}\"\r\n"
                             "    unit_of_measurement: \"%s\"\r\n\r\n"),
-                       UID, tims[i].c_str(), energyTeleTopic, tims[i].c_str(), tims2[i].c_str());
+                       UID, tims[i].c_str(),
+                       UID, tims[i].c_str(),
+                       energyTeleTopic, tims[i].c_str(), tims2[i].c_str());
         }
         server->sendContent_P(tmpData);
     }
