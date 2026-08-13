@@ -442,17 +442,20 @@ void DC1::httpHtml(ESP8266WebServer *server)
         snprintf_P(tmpData, sizeof(tmpData),
                    PSTR("<div style='display:inline-block;margin:4px;text-align:center'>"
                         "<button type='button' style='width:56px' onclick=\"ajaxPost('/dc1_do', 'do=T&c=%d');\" id='power%d' class='btn-%s'>%s</button>"
-                        "<div id='timer%d' style='font-size:12px;color:#888'>--</div>"
-                        "<input type='number' id='tsec%d' min='0' max='86400' style='width:52px' value='0'>"
+                        "<div id='timer%d' style='font-size:12px;color:#888'>--</div>"),
+                   ch + 1, ch + 1,
+                   bitRead(lastState, ch) ? PSTR("success") : PSTR("info"),
+                   bitRead(lastState, ch) ? PSTR("开") : PSTR("关"),
+                   ch + 1);
+        server->sendContent_P(tmpData);
+        snprintf_P(tmpData, sizeof(tmpData),
+                   PSTR("<input type='number' id='tsec%d' min='0' max='86400' style='width:52px' value='0'>"
                         "<select id='ttgt%d' style='width:44px'>"
                         "<option value='0'>关</option><option value='1'>开</option>"
                         "</select>"
                         "<button type='button' style='width:34px;font-size:12px' onclick=\"timerSet(%d)\">设</button>"
                         "</div>"),
-                   ch + 1, ch + 1,
-                   bitRead(lastState, ch) ? PSTR("success") : PSTR("info"),
-                   bitRead(lastState, ch) ? PSTR("开") : PSTR("关"),
-                   ch + 1, ch + 1, ch + 1, ch + 1);
+                   ch + 1, ch + 1, ch + 1);
         server->sendContent_P(tmpData);
     }
 
