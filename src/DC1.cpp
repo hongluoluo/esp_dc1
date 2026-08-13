@@ -449,11 +449,11 @@ void DC1::httpHtml(ESP8266WebServer *server)
                    ch + 1);
         server->sendContent_P(tmpData);
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<input type='number' id='tsec%d' min='0' max='86400' style='width:52px' value='0'>"
+                   PSTR("<input type='number' id='tsec%d' min='0' max='1440' style='width:48px' value='0'>min"
                         "<select id='ttgt%d' style='width:44px'>"
                         "<option value='0'>关</option><option value='1'>开</option>"
                         "</select>"
-                        "<button type='button' style='width:34px;font-size:12px' onclick=\"timerSet(%d)\">设</button>"
+                        "<button type='button' style='width:42px;background:#ffc107;border-color:#ffc107;color:#fff;font-size:12px' onclick=\"timerSet(%d)\">开始</button>"
                         "</div>"),
                    ch + 1, ch + 1, ch + 1);
         server->sendContent_P(tmpData);
@@ -533,8 +533,8 @@ void DC1::httpHtml(ESP8266WebServer *server)
 
     server->sendContent_P(
         PSTR("<script type='text/javascript'>"
-             "function setDataSub(data,key){if(key.substr(0,5)=='power' && key.length==6){var t=id(key);var v=data[key];t.setAttribute('class',v==1?'btn-success':'btn-info');t.innerHTML=v==1?'开':'关';return true}if(key.substr(0,5)=='timer' && key.length==6){var t=id(key);var v=data[key];var n=key.substr(5,1);var tgt=data['timer'+n+'target'];if(v>0){t.innerHTML='剩余'+v+'s→'+(tgt=='on'?'开':'关');t.style.color='#c77'}else{t.innerHTML='--';t.style.color='#888'}return true}return false}"
-             "function timerSet(n){var sec=id('tsec'+n).value;var tgt=id('ttgt'+n).value;if(sec<0){sec=0}ajaxPost('/dc1_setting','timer_ch='+n+'&timer_seconds='+sec+'&timer_target='+(tgt=='1'?'on':'off'))}"));
+             "function setDataSub(data,key){if(key.substr(0,5)=='power' && key.length==6){var t=id(key);var v=data[key];t.setAttribute('class',v==1?'btn-success':'btn-info');t.innerHTML=v==1?'开':'关';return true}if(key.substr(0,5)=='timer' && key.length==6){var t=id(key);var v=data[key];var n=key.substr(5,1);var tgt=data['timer'+n+'target'];if(v>0){var m=Math.round(v/60*10)/10;t.innerHTML='剩余'+m+'min→'+(tgt=='on'?'开':'关');t.style.color='#c77'}else{t.innerHTML='--';t.style.color='#888'}return true}return false}"
+             "function timerSet(n){var sec=id('tsec'+n).value*60;var tgt=id('ttgt'+n).value;if(sec<0){sec=0}ajaxPost('/dc1_setting','timer_ch='+n+'&timer_seconds='+sec+'&timer_target='+(tgt=='1'?'on':'off'))}"));
 
     snprintf_P(tmpData, sizeof(tmpData),
                PSTR("setRadioValue('power_on_state', '%d');"
