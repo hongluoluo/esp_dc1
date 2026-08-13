@@ -440,7 +440,7 @@ void DC1::httpHtml(ESP8266WebServer *server)
     for (size_t ch = 0; ch < channels; ch++)
     {
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<div style='display:inline-block;margin:4px;text-align:center'>"
+                   PSTR("<div style='display:block;margin:6px 0;text-align:center'>"
                         "<button type='button' style='width:56px' onclick=\"ajaxPost('/dc1_do', 'do=T&c=%d');\" id='power%d' class='btn-%s'>%s</button>"
                         "<div id='timer%d' style='font-size:12px;color:#888'>--</div>"),
                    ch + 1, ch + 1,
