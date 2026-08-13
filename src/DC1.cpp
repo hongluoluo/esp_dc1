@@ -440,7 +440,7 @@ void DC1::httpHtml(ESP8266WebServer *server)
     for (size_t ch = 0; ch < channels; ch++)
     {
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<div style='border:1px solid #8db3e2;border-radius:4px;padding:6px 8px;margin:6px 0;text-align:left'>"
+                   PSTR("<div style='border:1px solid #8db3e2;border-radius:4px;padding:6px 8px;margin:6px 0;display:flex;align-items:center;justify-content:space-between'>"
                         "<button type='button' style='width:56px' onclick=\"ajaxPost('/dc1_do', 'do=T&c=%d');\" id='power%d' class='btn-%s'>%s</button>"),
                    ch + 1, ch + 1,
                    bitRead(lastState, ch) ? PSTR("success") : PSTR("info"),
