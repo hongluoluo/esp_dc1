@@ -33,14 +33,18 @@ typedef struct _DC1ConfigMessage {
     uint16_t energy_kWhdoy;
     uint32_t energy_kWhtotal_time;
     uint16_t energy_max_power;
+    pb_size_t timer_remaining_count;
+    uint32_t timer_remaining[4];
+    pb_size_t timer_target_count;
+    uint8_t timer_target[4];
 /* @@protoc_insertion_point(struct:DC1ConfigMessage) */
 } DC1ConfigMessage;
 
 /* Struct field encoding specification for nanopb */
-extern const pb_field_t DC1ConfigMessage_fields[18];
+extern const pb_field_t DC1ConfigMessage_fields[20];
 
 /* Maximum encoded size of messages (where known) */
-#define DC1ConfigMessage_size                    113
+#define DC1ConfigMessage_size                    145
 
 /* Message IDs (where set with "msgid" option) */
 #ifdef PB_MSGID

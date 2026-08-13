@@ -91,11 +91,18 @@ void DC1::loop()
         bitClear(operationFlag, 0);
         energyUpdate();
     }
+
+    if (bitRead(operationFlag, 2))
+    {
+        bitClear(operationFlag, 2);
+        timerCheck();
+    }
 }
 
 void DC1::perSecondDo()
 {
     bitSet(operationFlag, 0);
+    bitSet(operationFlag, 2);
 }
 #pragma endregion
 
@@ -154,7 +161,126 @@ void DC1::mqttCallback(char *topic, char *payload, char *cmnd)
     {
         energyClear();
     }
+    else if (strcmp(cmnd, "timer") == 0)
+    {
+        timerCmd(payload);
+    }
 }
+
+#pragma region 倒计时
+
+void DC1::timerCheck()
+{
+    bool anyActive = false;
+    for (uint8_t ch = 0; ch < channels; ch++)
+    {
+        if (ch >= config.timer_remaining_count)
+        {
+            break;
+        }
+        if (config.timer_remaining[ch] > 0)
+        {
+            anyActive = true;
+            config.timer_remaining[ch]--;
+            if (config.timer_remaining[ch] == 0)
+            {
+                Debug::AddInfo(PSTR("Timer ch%d expired -> %s"), ch + 1, config.timer_target[ch] ? "ON" : "OFF");
+                switchRelay(ch, config.timer_target[ch] == 1, true);
+                reportTimer();
+                Config::delaySaveConfig(5);
+            }
+        }
+    }
+    // 倒计时激活期间每60秒持久化一次剩余秒数，断电最多丢60秒进度
+    if (anyActive)
+    {
+        timerPersistCounter++;
+        if (timerPersistCounter >= 60)
+        {
+            timerPersistCounter = 0;
+            Config::delaySaveConfig(2);
+        }
+    }
+}
+
+void DC1::timerSet(uint8_t ch, uint32_t seconds, bool isOn)
+{
+    if (ch >= channels)
+    {
+        return;
+    }
+    config.timer_remaining[ch] = seconds;
+    config.timer_target[ch] = isOn ? 1 : 0;
+    if (config.timer_remaining_count < ch + 1)
+    {
+        config.timer_remaining_count = ch + 1;
+    }
+    if (config.timer_target_count < ch + 1)
+    {
+        config.timer_target_count = ch + 1;
+    }
+    Debug::AddInfo(PSTR("Timer ch%d set %lus -> %s"), ch + 1, (unsigned long)seconds, isOn ? "ON" : "OFF");
+    Config::saveConfig();
+    reportTimer();
+}
+
+void DC1::timerCancel(uint8_t ch)
+{
+    if (ch >= channels)
+    {
+        return;
+    }
+    config.timer_remaining[ch] = 0;
+    Debug::AddInfo(PSTR("Timer ch%d cancelled"), ch + 1);
+    Config::saveConfig();
+    reportTimer();
+}
+
+void DC1::reportTimer()
+{
+    char msg[200];
+    char *p = msg;
+    p += sprintf(p, "{");
+    for (uint8_t ch = 0; ch < channels; ch++)
+    {
+        uint32_t rem = (ch < config.timer_remaining_count) ? config.timer_remaining[ch] : 0;
+        uint8_t tgt = (ch < config.timer_target_count) ? config.timer_target[ch] : 0;
+        p += sprintf(p, "%s\"%d\":{\"remaining\":%lu,\"target\":\"%s\"}", ch ? "," : "", ch + 1, (unsigned long)rem, tgt ? "on" : "off");
+    }
+    p += sprintf(p, "}");
+    Mqtt::publish(Mqtt::getStatTopic(F("timer")), msg);
+}
+
+void DC1::timerCmd(char *payload)
+{
+    if (strcmp(payload, "?") == 0)
+    {
+        reportTimer();
+        return;
+    }
+    uint8_t ch = 0;
+    unsigned long sec = 0;
+    char act[4] = {0};
+    int n = sscanf(payload, "%hhu %lu %3s", &ch, &sec, act);
+    if (n < 1 || ch < 1 || ch > channels)
+    {
+        reportTimer();
+        return;
+    }
+    if (n >= 3 && sec > 0)
+    {
+        timerSet(ch - 1, sec, strcmp(act, "on") == 0);
+    }
+    else if (n >= 2 && sec == 0)
+    {
+        timerCancel(ch - 1);
+    }
+    else
+    {
+        reportTimer();
+    }
+}
+#pragma endregion
 
 void DC1::mqttConnected()
 {
@@ -289,6 +415,16 @@ String DC1::httpGetStatus(ESP8266WebServer *server)
     {
         data += ",\"power" + String(ch + 1) + "\":";
         data += bitRead(lastState, ch) ? 1 : 0;
+    }
+    for (size_t ch = 0; ch < channels; ch++)
+    {
+        uint32_t rem = (ch < config.timer_remaining_count) ? config.timer_remaining[ch] : 0;
+        uint8_t tgt = (ch < config.timer_target_count) ? config.timer_target[ch] : 0;
+        data += ",\"timer" + String(ch + 1) + "\":";
+        data += String(rem);
+        data += ",\"timer" + String(ch + 1) + "target\":\"";
+        data += tgt ? "on" : "off";
+        data += "\"";
     }
     energyShow(false);
     data += String(tmpData);
@@ -442,6 +578,24 @@ void DC1::httpSetting(ESP8266WebServer *server)
     config.report_interval = server->arg(F("report_interval")).toInt();
     config.energy_power_delta = server->arg(F("energy_power_delta")).toInt();
     config.energy_max_power = server->arg(F("energy_max_power")).toInt();
+
+    // 倒计时: timer_ch=1..4, timer_seconds=剩余秒数(0=取消), timer_target=on|off
+    if (server->hasArg(F("timer_ch")))
+    {
+        uint8_t timerCh = server->arg(F("timer_ch")).toInt();
+        uint32_t timerSec = server->arg(F("timer_seconds")).toInt();
+        if (timerCh >= 1 && timerCh <= channels)
+        {
+            if (timerSec > 0)
+            {
+                timerSet(timerCh - 1, timerSec, server->arg(F("timer_target")) == F("on"));
+            }
+            else
+            {
+                timerCancel(timerCh - 1);
+            }
+        }
+    }
 
     logoLed();
 

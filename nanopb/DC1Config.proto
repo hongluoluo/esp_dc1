@@ -24,4 +24,8 @@ message DC1ConfigMessage {
     uint32 energy_kWhtotal_time = 29 [(nanopb).int_size = IS_32];
     uint32 energy_max_power = 30 [(nanopb).int_size = IS_16];
 
+    // 倒计时: timer_remaining[ch] = 剩余秒数(0=未启用), timer_target[ch] = 到期动作(0=关 1=开)
+    repeated uint32 timer_remaining = 31 [(nanopb).max_count = 4, (nanopb).int_size = IS_32];
+    repeated uint32 timer_target = 32 [(nanopb).max_count = 4, (nanopb).int_size = IS_8];
+
 }

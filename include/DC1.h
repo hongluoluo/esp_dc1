@@ -67,6 +67,14 @@ private:
     void logoLed();
 
     void reportPower();
+
+    // 倒计时
+    uint8_t timerPersistCounter = 0; // 每60秒持久化剩余秒数
+    void timerCheck();               // 每秒检查倒计时
+    void timerSet(uint8_t ch, uint32_t seconds, bool isOn);
+    void timerCancel(uint8_t ch);
+    void reportTimer();
+    void timerCmd(char *payload);    // MQTT timer 指令解析
     void reportEnergy();
 
 public:
