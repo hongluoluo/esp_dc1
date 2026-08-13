@@ -82,7 +82,8 @@ ioBroker相关接入问题可以加QQ群776817275咨询
 
 ![image](https://github.com/qlwz/esp_dc1/blob/master/file/images/tab1.png)
 ![image](https://github.com/qlwz/esp_dc1/blob/master/file/images/tab2.png)
-![image](https://github.com/qlwz/esp_dc1/blob/master/file/images/tab3.png)
+<img width="1045" height="996" alt="image" src="https://github.com/user-attachments/assets/13bb35fd-f6de-4140-a32c-51d3f72284d3" />
+
 ![image](https://github.com/qlwz/esp_dc1/blob/master/file/images/tab4.png)
 
 ## 致谢
