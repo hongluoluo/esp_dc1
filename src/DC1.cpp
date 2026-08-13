@@ -440,19 +440,19 @@ void DC1::httpHtml(ESP8266WebServer *server)
     for (size_t ch = 0; ch < channels; ch++)
     {
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<div style='border:1px solid #8db3e2;border-radius:4px;padding:6px 8px;margin:6px 0;display:flex;align-items:center;justify-content:space-between'>"
+                   PSTR("<div style='border:1px solid #8db3e2;border-radius:4px;padding:6px 8px;margin:6px 0;display:flex;align-items:center'>"
                         "<button type='button' style='width:56px' onclick=\"ajaxPost('/dc1_do', 'do=T&c=%d');\" id='power%d' class='btn-%s'>%s</button>"),
                    ch + 1, ch + 1,
                    bitRead(lastState, ch) ? PSTR("success") : PSTR("info"),
                    bitRead(lastState, ch) ? PSTR("开") : PSTR("关"));
         server->sendContent_P(tmpData);
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<input type='number' id='tsec%d' min='0' max='1440' style='width:48px' value='0'>min"
-                        "<select id='ttgt%d' style='width:44px'>"
+                   PSTR("<input type='number' id='tsec%d' min='0' max='1440' style='width:48px;margin-left:5px' value='0'>min"
+                        "<select id='ttgt%d' style='width:44px;margin-left:5px'>"
                         "<option value='0'>关</option><option value='1'>开</option>"
                         "</select>"
-                        "<button type='button' style='width:42px;background:#ffc107;border-color:#ffc107;color:#fff;font-size:12px' onclick=\"timerSet(%d)\">开始</button>"
-                        "<span id='timer%d' style='font-size:12px;color:#888;margin-left:8px'>--</span>"
+                        "<button type='button' style='width:42px;background:#ffc107;border-color:#ffc107;color:#fff;font-size:12px;margin-left:5px' onclick=\"timerSet(%d)\">开始</button>"
+                        "<span id='timer%d' style='font-size:12px;color:#888;margin-left:auto'>--</span>"
                         "</div>"),
                    ch + 1, ch + 1, ch + 1, ch + 1);
         server->sendContent_P(tmpData);
