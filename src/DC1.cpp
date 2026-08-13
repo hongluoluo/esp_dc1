@@ -440,10 +440,19 @@ void DC1::httpHtml(ESP8266WebServer *server)
     for (size_t ch = 0; ch < channels; ch++)
     {
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR(" <button type='button' style='width:50px' onclick=\"ajaxPost('/dc1_do', 'do=T&c=%d');\" id='power%d' class='btn-%s'>%s</button>"),
+                   PSTR("<div style='display:inline-block;margin:4px;text-align:center'>"
+                        "<button type='button' style='width:56px' onclick=\"ajaxPost('/dc1_do', 'do=T&c=%d');\" id='power%d' class='btn-%s'>%s</button>"
+                        "<div id='timer%d' style='font-size:12px;color:#888'>--</div>"
+                        "<input type='number' id='tsec%d' min='0' max='86400' style='width:52px' value='0'>"
+                        "<select id='ttgt%d' style='width:44px'>"
+                        "<option value='0'>关</option><option value='1'>开</option>"
+                        "</select>"
+                        "<button type='button' style='width:34px;font-size:12px' onclick=\"timerSet(%d)\">设</button>"
+                        "</div>"),
                    ch + 1, ch + 1,
                    bitRead(lastState, ch) ? PSTR("success") : PSTR("info"),
-                   bitRead(lastState, ch) ? PSTR("开") : PSTR("关"));
+                   bitRead(lastState, ch) ? PSTR("开") : PSTR("关"),
+                   ch + 1, ch + 1, ch + 1, ch + 1);
         server->sendContent_P(tmpData);
     }
 
@@ -521,7 +530,8 @@ void DC1::httpHtml(ESP8266WebServer *server)
 
     server->sendContent_P(
         PSTR("<script type='text/javascript'>"
-             "function setDataSub(data,key){if(key.substr(0,5)=='power' && key.length==6){var t=id(key);var v=data[key];t.setAttribute('class',v==1?'btn-success':'btn-info');t.innerHTML=v==1?'开':'关';return true}return false}"));
+             "function setDataSub(data,key){if(key.substr(0,5)=='power' && key.length==6){var t=id(key);var v=data[key];t.setAttribute('class',v==1?'btn-success':'btn-info');t.innerHTML=v==1?'开':'关';return true}if(key.substr(0,5)=='timer' && key.length==6){var t=id(key);var v=data[key];var n=key.substr(5,1);var tgt=data['timer'+n+'target'];if(v>0){t.innerHTML='剩余'+v+'s→'+(tgt=='on'?'开':'关');t.style.color='#c77'}else{t.innerHTML='--';t.style.color='#888'}return true}return false}"
+             "function timerSet(n){var sec=id('tsec'+n).value;var tgt=id('ttgt'+n).value;if(sec<0){sec=0}ajaxPost('/dc1_setting','timer_ch='+n+'&timer_seconds='+sec+'&timer_target='+(tgt=='1'?'on':'off'))}"));
 
     snprintf_P(tmpData, sizeof(tmpData),
                PSTR("setRadioValue('power_on_state', '%d');"
