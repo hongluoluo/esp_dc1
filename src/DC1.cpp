@@ -641,10 +641,13 @@ void DC1::httpHtml(ESP8266WebServer *server)
         snprintf_P(tmpData, sizeof(tmpData),
                    PSTR("<div style='text-align:center;white-space:nowrap;flex-shrink:0'>"
                         "<button type='button' onclick=\"showSchedModal(%d)\" style='background:#7c5cbf;border:none;border-radius:12px;color:#fff;padding:3px 9px;font-size:12px'>定时任务</button>&nbsp;"
-                        "<button type='button' onclick=\"showModal(%d)\" style='background:#7c5cbf;border:none;border-radius:12px;color:#fff;padding:3px 9px;font-size:12px'>倒计时</button>"
-                        "<div id='sched%d' style='font-size:11px;color:#888;margin-top:3px'>无定时</div>"
+                        "<button type='button' onclick=\"showModal(%d)\" style='background:#7c5cbf;border:none;border-radius:12px;color:#fff;padding:3px 9px;font-size:12px'>倒计时</button>"),
+                   ch + 1, ch + 1);
+        server->sendContent_P(tmpData);
+        snprintf_P(tmpData, sizeof(tmpData),
+                   PSTR("<div id='sched%d' style='font-size:11px;color:#888;margin-top:3px'>无定时</div>"
                         "<div id='timer%d' style='font-size:11px;color:#888;margin-top:1px'>无倒计时</div></div></div>"),
-                   ch + 1, ch + 1, ch + 1, ch + 1);
+                   ch + 1, ch + 1);
         server->sendContent_P(tmpData);
     }
 
