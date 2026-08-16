@@ -455,24 +455,27 @@ void DC1::httpHtml(ESP8266WebServer *server)
                    bitRead(lastState, ch) ? PSTR("right") : PSTR("left"));
         server->sendContent_P(tmpData);
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<div style='text-align:center'><button type='button' onclick=\"showTimer(%d)\" style='background:#7c5cbf;border:none;border-radius:14px;color:#fff;padding:4px 16px;font-size:13px'>倒计时</button>"
+                   PSTR("<div style='text-align:center'><button type='button' onclick=\"showModal(%d)\" style='background:#7c5cbf;border:none;border-radius:14px;color:#fff;padding:4px 16px;font-size:13px'>倒计时</button>"
                         "<div id='timer%d' style='font-size:12px;color:#888;margin-top:2px'>无倒计时</div></div></div>"),
                    ch + 1, ch + 1);
-        server->sendContent_P(tmpData);
-        // 隐藏的倒计时设置行(点倒计时按钮展开)
-        snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<div id='tset%d' style='display:none;background:#f7f3fc;border-radius:8px;padding:6px 10px;margin:-4px 0 8px;text-align:center'>"
-                        "<input type='number' id='tsec%d' min='0' max='1440' style='width:56px' value='0'>min"
-                        "<select id='ttgt%d' style='width:44px'>"
-                        "<option value='0'>关</option><option value='1'>开</option>"
-                        "</select>"
-                        "<button type='button' style='width:44px;background:#ffc107;border:none;border-radius:4px;color:#fff;font-size:12px;margin-left:4px' onclick=\"timerSet(%d)\">开始</button></div>"),
-                   ch + 1, ch + 1, ch + 1, ch + 1);
         server->sendContent_P(tmpData);
     }
 
     server->sendContent_P(
         PSTR("</td></tr></tbody></table>"
+
+             "<div id='modal' style='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:99;align-items:center;justify-content:center' onclick=\"if(event.target==this){closeModal()}\">"
+             "<div style='background:#fff;border-radius:14px;padding:18px 22px;width:250px;max-width:82%;text-align:center'>"
+             "<div id='mtitle' style='font-weight:bold;font-size:16px;margin-bottom:12px'>倒计时</div>"
+             "<div><input type='number' id='msec' min='0' max='1440' style='width:64px;font-size:15px' value='0'><span style='font-size:13px;color:#666'>&nbsp;min</span></div>"
+             "<div style='margin:12px 0'><select id='mtgt' style='width:90px;font-size:14px'>"
+             "<option value='0'>关</option><option value='1'>开</option>"
+             "</select></div>"
+             "<div style='margin-top:14px'>"
+             "<button type='button' onclick=\"timerSetModal()\" style='background:#7c5cbf;border:none;border-radius:8px;color:#fff;padding:7px 26px;font-size:14px'>开始</button>"
+             "&nbsp;&nbsp;"
+             "<button type='button' onclick=\"closeModal()\" style='background:#eee;border:none;border-radius:8px;padding:7px 16px;font-size:14px'>取消</button>"
+             "</div></div></div>"
 
              "<table class='gridtable'><thead><tr><th colspan='2'>电量统计</th></tr></thead><tbody>"
              "<tr colspan='2'><td><div style='width:260px;margin:0 auto;text-align:left'>"
@@ -547,8 +550,9 @@ void DC1::httpHtml(ESP8266WebServer *server)
         PSTR("<script type='text/javascript'>"
              "function setDataSub(data,key){if(key.substr(0,5)=='power' && key.length==6){var n=key.substr(5,1);var v=data[key];var sw=id('sw'+n);sw.style.background=v==1?'#7c5cbf':'#ccc';var sl=sw.children[0];if(v==1){sl.style.right='3px';sl.style.left='auto'}else{sl.style.left='3px';sl.style.right='auto'}id('stat'+n).innerHTML=v==1?'已开启':'已关闭';return true}if(key.substr(0,5)=='timer' && key.length==6){var n=key.substr(5,1);var v=data[key];var tgt=data['timer'+n+'target'];var t=id('timer'+n);if(v>0){var m=Math.round(v/60*10)/10;t.innerHTML='剩余'+m+'min→'+(tgt=='on'?'开':'关');t.style.color='#c77'}else{t.innerHTML='无倒计时';t.style.color='#888'}return true}return false}"
              "function toggleSw(n){ajaxPost('/dc1_do','do=T&c='+n)}"
-             "function showTimer(n){var d=id('tset'+n);d.style.display=d.style.display=='none'?'block':'none'}"
-             "function timerSet(n){var sec=id('tsec'+n).value*60;var tgt=id('ttgt'+n).value;if(sec<0){sec=0}ajaxPost('/dc1_setting','timer_ch='+n+'&timer_seconds='+sec+'&timer_target='+(tgt=='1'?'on':'off'))}"));
+             "var curCh=1;function showModal(n){curCh=n;id('mtitle').innerHTML='开关'+n+' 倒计时';id('msec').value='0';id('mtgt').value='0';id('modal').style.display='flex'}"
+             "function closeModal(){id('modal').style.display='none'}"
+             "function timerSetModal(){var sec=id('msec').value*60;var tgt=id('mtgt').value;if(sec<0){sec=0}ajaxPost('/dc1_setting','timer_ch='+curCh+'&timer_seconds='+sec+'&timer_target='+(tgt=='1'?'on':'off'));closeModal()}"));
 
     snprintf_P(tmpData, sizeof(tmpData),
                PSTR("setRadioValue('power_on_state', '%d');"
