@@ -7,6 +7,9 @@
 已有的方法为内网劫持实现，具体可参考[这里](https://bbs.hassbian.com/thread-5637-1-1.html)。
 
 这次要实现的是通过一个自定义的固件，来完整实现DC1联网控制。
+## 此固件配套的安卓APP
+
+https://github.com/hongluoluo/DC1-android-client
 
 > ### 作者声明
 >
