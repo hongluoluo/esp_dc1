@@ -625,23 +625,23 @@ void DC1::httpHtml(ESP8266WebServer *server)
     {
         // 卡片: 左(名称+状态) 中(toggle开关) 右(倒计时按钮+状态)
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<div style='background:#f3edfa;border-radius:12px;padding:8px 10px;margin:8px 0;display:flex;align-items:center;justify-content:space-between'>"
-                        "<div style='text-align:left'><div style='font-weight:bold;font-size:15px'>开关%d</div>"
-                        "<div id='stat%d' style='font-size:12px;color:#888'>%s</div></div>"),
+                   PSTR("<div style='background:#f3edfa;border-radius:12px;padding:8px 8px;margin:8px 0;display:flex;align-items:center;justify-content:space-between'>"
+                        "<div style='text-align:left'><div style='font-weight:bold;font-size:14px'>开关%d</div>"
+                        "<div id='stat%d' style='font-size:11px;color:#888'>%s</div></div>"),
                    ch + 1, ch + 1,
                    bitRead(lastState, ch) ? PSTR("已开启") : PSTR("已关闭"));
         server->sendContent_P(tmpData);
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<div><button id='sw%d' onclick=\"toggleSw(%d)\" style='width:56px;height:30px;border-radius:15px;background:%s;border:none;position:relative;outline:none'>"
-                        "<span style='position:absolute;top:3px;%s:3px;width:24px;height:24px;border-radius:12px;background:#fff;display:block'></span></button></div>"),
+                   PSTR("<div><button id='sw%d' onclick=\"toggleSw(%d)\" style='width:44px;height:26px;border-radius:13px;background:%s;border:none;position:relative;outline:none'>"
+                        "<span style='position:absolute;top:2px;%s:2px;width:22px;height:22px;border-radius:11px;background:#fff;display:block'></span></button></div>"),
                    ch + 1, ch + 1,
                    bitRead(lastState, ch) ? PSTR("#7c5cbf") : PSTR("#ccc"),
                    bitRead(lastState, ch) ? PSTR("right") : PSTR("left"));
         server->sendContent_P(tmpData);
         snprintf_P(tmpData, sizeof(tmpData),
                    PSTR("<div style='text-align:center;white-space:nowrap'>"
-                        "<button type='button' onclick=\"showSchedModal(%d)\" style='background:#7c5cbf;border:none;border-radius:11px;color:#fff;padding:2px 7px;font-size:11px'>定时任务</button>&nbsp;"
-                        "<button type='button' onclick=\"showModal(%d)\" style='background:#7c5cbf;border:none;border-radius:11px;color:#fff;padding:2px 7px;font-size:11px'>倒计时</button>"),
+                        "<button type='button' onclick=\"showSchedModal(%d)\" style='background:#7c5cbf;border:none;border-radius:10px;color:#fff;padding:2px 4px;font-size:10px'>定时任务</button>"
+                        "<button type='button' onclick=\"showModal(%d)\" style='background:#7c5cbf;border:none;border-radius:10px;color:#fff;padding:2px 4px;font-size:10px;margin-left:3px'>倒计时</button>"),
                    ch + 1, ch + 1);
         server->sendContent_P(tmpData);
         snprintf_P(tmpData, sizeof(tmpData),
