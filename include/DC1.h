@@ -75,6 +75,14 @@ private:
     void timerCancel(uint8_t ch);
     void reportTimer();
     void timerCmd(char *payload);    // MQTT timer 指令解析
+
+    // 定时任务(每日重复)
+    int16_t schedLastMinute[4] = {-1, -1, -1, -1}; // 触发去重(跨天重置)
+    void scheduleCheck();                          // 每秒检查定时
+    void scheduleSet(uint8_t ch, int32_t onMin, int32_t offMin);
+    void scheduleClear(uint8_t ch);
+    void reportSchedule();
+    void scheduleCmd(char *payload); // MQTT schedule 指令解析
     void reportEnergy();
 
 public:

@@ -28,4 +28,8 @@ message DC1ConfigMessage {
     repeated uint32 timer_remaining = 31 [(nanopb).max_count = 4, (nanopb).int_size = IS_32];
     repeated uint32 timer_target = 32 [(nanopb).max_count = 4, (nanopb).int_size = IS_8];
 
+    // 定时任务: sched_on[ch]/sched_off[ch] = 每天开启/关闭时间(分钟0-1439, 0xFFFFFFFF=禁用)
+    repeated uint32 sched_on = 33 [(nanopb).max_count = 4, (nanopb).int_size = IS_32];
+    repeated uint32 sched_off = 34 [(nanopb).max_count = 4, (nanopb).int_size = IS_32];
+
 }
