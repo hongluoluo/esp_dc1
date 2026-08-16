@@ -625,7 +625,7 @@ void DC1::httpHtml(ESP8266WebServer *server)
     {
         // 卡片: 左(名称+状态) 中(toggle开关) 右(倒计时按钮+状态)
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<div style='background:#f3edfa;border-radius:12px;padding:8px 14px;margin:8px 0;display:flex;align-items:center;justify-content:space-between'>"
+                   PSTR("<div style='background:#f3edfa;border-radius:12px;padding:8px 10px;margin:8px 0;display:flex;align-items:center;justify-content:space-between'>"
                         "<div style='text-align:left'><div style='font-weight:bold;font-size:15px'>开关%d</div>"
                         "<div id='stat%d' style='font-size:12px;color:#888'>%s</div></div>"),
                    ch + 1, ch + 1,
@@ -639,14 +639,14 @@ void DC1::httpHtml(ESP8266WebServer *server)
                    bitRead(lastState, ch) ? PSTR("right") : PSTR("left"));
         server->sendContent_P(tmpData);
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<div style='text-align:center;white-space:nowrap;flex-shrink:0'>"
-                        "<button type='button' onclick=\"showSchedModal(%d)\" style='background:#7c5cbf;border:none;border-radius:12px;color:#fff;padding:3px 9px;font-size:12px'>定时任务</button>&nbsp;"
-                        "<button type='button' onclick=\"showModal(%d)\" style='background:#7c5cbf;border:none;border-radius:12px;color:#fff;padding:3px 9px;font-size:12px'>倒计时</button>"),
+                   PSTR("<div style='text-align:center;white-space:nowrap'>"
+                        "<button type='button' onclick=\"showSchedModal(%d)\" style='background:#7c5cbf;border:none;border-radius:11px;color:#fff;padding:2px 7px;font-size:11px'>定时任务</button>&nbsp;"
+                        "<button type='button' onclick=\"showModal(%d)\" style='background:#7c5cbf;border:none;border-radius:11px;color:#fff;padding:2px 7px;font-size:11px'>倒计时</button>"),
                    ch + 1, ch + 1);
         server->sendContent_P(tmpData);
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<div id='sched%d' style='font-size:11px;color:#888;margin-top:3px'>无定时</div>"
-                        "<div id='timer%d' style='font-size:11px;color:#888;margin-top:1px'>无倒计时</div></div></div>"),
+                   PSTR("<div id='sched%d' style='font-size:10px;color:#888;margin-top:3px'>无定时</div>"
+                        "<div id='timer%d' style='font-size:10px;color:#888;margin-top:1px'>无倒计时</div></div></div>"),
                    ch + 1, ch + 1);
         server->sendContent_P(tmpData);
     }
