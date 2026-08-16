@@ -80,10 +80,10 @@ ioBroker相关接入问题可以加QQ群776817275咨询
 
 # 固件截图
 
-![image](https://github.com/qlwz/esp_dc1/blob/master/file/images/tab1.png)
-![image](https://github.com/qlwz/esp_dc1/blob/master/file/images/tab2.png)
-![image](https://github.com/qlwz/esp_dc1/blob/master/file/images/tab3.png)
-![image](https://github.com/qlwz/esp_dc1/blob/master/file/images/tab4.png)
+<img width="1050" height="907" alt="image" src="https://github.com/user-attachments/assets/11dc0eee-7245-4e8a-923f-ef8e0220617a" />
+<img width="953" height="783" alt="image" src="https://github.com/user-attachments/assets/fc96662e-2d60-410e-b097-e689ea30b85d" />
+<img width="986" height="767" alt="image" src="https://github.com/user-attachments/assets/2e5ca0b5-98d9-408c-8845-17a46d3030da" />
+
 
 ## 致谢
 以下排名不分先后，为随机。
