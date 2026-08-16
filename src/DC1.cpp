@@ -642,7 +642,7 @@ void DC1::httpHtml(ESP8266WebServer *server)
                    bitRead(lastState, ch) ? PSTR("right") : PSTR("left"));
         server->sendContent_P(tmpData);
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<td style='border:0;padding:2px;text-align:center;vertical-align:middle;width:130px'>"
+                   PSTR("<td style='border:0;padding:2px;text-align:right;vertical-align:middle'>"
                         "<span style='display:inline-block;text-align:center'>"
                         "<button type='button' onclick=\"showSchedModal(%d)\" style='background:#7c5cbf;border:none;border-radius:10px;color:#fff;padding:2px 5px;font-size:10px'>定时任务</button>"
                         "<br><span id='sched%d' style='font-size:10px;color:#888'>无定时</span>"
