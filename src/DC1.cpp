@@ -650,7 +650,7 @@ void DC1::httpHtml(ESP8266WebServer *server)
                    ch + 1, ch + 1);
         server->sendContent_P(tmpData);
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<span style='display:inline-block;text-align:center;margin-left:30%%'>"
+                   PSTR("<span style='display:inline-block;text-align:center;margin-left:16%%'>"
                         "<button type='button' onclick=\"showModal(%d)\" style='background:#7c5cbf;border:none;border-radius:10px;color:#fff;padding:2px 0;font-size:10px;width:54px'>倒计时</button>"
                         "<br><span id='timer%d' style='font-size:10px;color:#888'>无倒计时</span>"
                         "</span>"
