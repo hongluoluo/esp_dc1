@@ -242,21 +242,21 @@ void Http::handleRoot()
     snprintf_P(tmpData, sizeof(tmpData),
                PSTR("<table class='gridtable'><thead><tr><th colspan='2'>固件升级</th></tr></thead><tbody>"
                     "<tr><td>当前版本</td><td>v%s</td></tr>"
-                    "<tr><td>编译时间</td><td>%s</td></tr>"),
+                    "<tr><td>编译时间</td><td>%s</td></tr>"
+                    "</tbody></table>"),
                module ? module->getModuleVersion().c_str() : PSTR("0"), Rtc::GetBuildDateAndTime().c_str());
     server->sendContent_P(tmpData);
 
     server->sendContent_P(
         PSTR("<form method='POST' action='/update' enctype='multipart/form-data' onsubmit='postupdate(this);return false'>"
-             "<tr><td colspan='2'><a class='file'><input type='file' name='update'>选择文件</a></td></tr>"
-             "<tr><td colspan='2'><button type='submit' class='btn-info'>升级</button><br>"
+             "<div style='margin:10px 0'><a class='file'><input type='file' name='update'>选择文件</a></div>"
+             "<div style='margin:6px 0'><button type='submit' class='btn-info'>升级</button></div>"
              "</form>"
-             "<tr><td colspan='2' style='text-align:center'>OTA更新</td></tr>"
+             "<div style='text-align:center;color:#888;margin:10px 0 4px'>OTA更新</div>"
              "<form method='POST' action='/ota' onsubmit='postform(this);return false'>"
-             "<tr><td>OTA地址</td><td><input type='text' name='ota_url' value='" OTA_URL "' style='width:98%'></td></tr>"
-             "<tr><td colspan='2'><button type='submit' class='btn-success' onclick=\"return confirm('确定要OTA更新？')\">OTA更新</button></td></tr>"
+             "<div style='margin:6px 0'>OTA地址 <input type='text' name='ota_url' value='" OTA_URL "' style='width:70%'></div>"
+             "<div style='margin:6px 0'><button type='submit' class='btn-success' onclick=\"return confirm('确定要OTA更新？')\">OTA更新</button></div>"
              "</form>"
-             "</tbody></table>"
              "</div>"));
     // TAB 4 End
 
