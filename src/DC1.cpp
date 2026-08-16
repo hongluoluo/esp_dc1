@@ -644,14 +644,14 @@ void DC1::httpHtml(ESP8266WebServer *server)
         snprintf_P(tmpData, sizeof(tmpData),
                    PSTR("<td style='border:0;padding:2px;text-align:right;vertical-align:middle;width:50%%'>"
                         "<span style='display:inline-block;text-align:center'>"
-                        "<button type='button' onclick=\"showSchedModal(%d)\" style='background:#7c5cbf;border:none;border-radius:10px;color:#fff;padding:2px 5px;font-size:10px'>定时任务</button>"
+                        "<button type='button' onclick=\"showSchedModal(%d)\" style='background:#7c5cbf;border:none;border-radius:10px;color:#fff;padding:2px 0;font-size:10px;width:54px'>定时任务</button>"
                         "<br><span id='sched%d' style='font-size:10px;color:#888'>无定时</span>"
                         "</span>"),
                    ch + 1, ch + 1);
         server->sendContent_P(tmpData);
         snprintf_P(tmpData, sizeof(tmpData),
-                   PSTR("<span style='display:inline-block;text-align:center;margin-left:8px'>"
-                        "<button type='button' onclick=\"showModal(%d)\" style='background:#7c5cbf;border:none;border-radius:10px;color:#fff;padding:2px 5px;font-size:10px'>倒计时</button>"
+                   PSTR("<span style='display:inline-block;text-align:center;margin-left:30%%'>"
+                        "<button type='button' onclick=\"showModal(%d)\" style='background:#7c5cbf;border:none;border-radius:10px;color:#fff;padding:2px 0;font-size:10px;width:54px'>倒计时</button>"
                         "<br><span id='timer%d' style='font-size:10px;color:#888'>无倒计时</span>"
                         "</span>"
                         "</td></tr></table></div>"),
