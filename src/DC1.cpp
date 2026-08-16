@@ -297,6 +297,20 @@ void DC1::timerCmd(char *payload)
 
 #define SCHED_DISABLED 0xFFFFFFFF
 
+// Rtc day_of_week: 1=周日..7=周六 → 位掩码 bit0=周一..bit6=周日
+uint8_t schedDowToBit(uint8_t dow)
+{
+    if (dow == 1)
+    {
+        return 0x40; // 周日
+    }
+    if (dow >= 2 && dow <= 7)
+    {
+        return 1 << (dow - 2); // 周一=bit0 ... 周六=bit5
+    }
+    return 0;
+}
+
 void DC1::scheduleCheck()
 {
     if (!Rtc::rtcTime.valid)
@@ -304,6 +318,7 @@ void DC1::scheduleCheck()
         return; // 时间未同步不触发
     }
     uint16_t nowMin = Rtc::rtcTime.hour * 60 + Rtc::rtcTime.minute;
+    uint8_t dayBit = schedDowToBit(Rtc::rtcTime.day_of_week);
     for (uint8_t ch = 0; ch < channels; ch++)
     {
         if (ch >= config.sched_on_count)
@@ -317,6 +332,11 @@ void DC1::scheduleCheck()
         if (nowMin == schedLastMinute[ch])
         {
             continue; // 本分钟已处理
+        }
+        uint32_t days = (ch < config.sched_days_count) ? config.sched_days[ch] : 0;
+        if (days != 0 && !(days & dayBit))
+        {
+            continue; // 今天不在生效星期内
         }
         uint32_t on = config.sched_on[ch];
         uint32_t off = (ch < config.sched_off_count) ? config.sched_off[ch] : SCHED_DISABLED;
@@ -337,7 +357,7 @@ void DC1::scheduleCheck()
     }
 }
 
-void DC1::scheduleSet(uint8_t ch, int32_t onMin, int32_t offMin)
+void DC1::scheduleSet(uint8_t ch, int32_t onMin, int32_t offMin, uint32_t days)
 {
     if (ch >= channels)
     {
@@ -345,6 +365,7 @@ void DC1::scheduleSet(uint8_t ch, int32_t onMin, int32_t offMin)
     }
     config.sched_on[ch] = (onMin >= 0) ? (uint32_t)onMin : SCHED_DISABLED;
     config.sched_off[ch] = (offMin >= 0) ? (uint32_t)offMin : SCHED_DISABLED;
+    config.sched_days[ch] = (uint8_t)(days & 0x7F);
     if (config.sched_on_count < ch + 1)
     {
         config.sched_on_count = ch + 1;
@@ -353,8 +374,12 @@ void DC1::scheduleSet(uint8_t ch, int32_t onMin, int32_t offMin)
     {
         config.sched_off_count = ch + 1;
     }
+    if (config.sched_days_count < ch + 1)
+    {
+        config.sched_days_count = ch + 1;
+    }
     schedLastMinute[ch] = -1;
-    Debug::AddInfo(PSTR("Schedule ch%d set on=%d off=%d"), ch + 1, onMin, offMin);
+    Debug::AddInfo(PSTR("Schedule ch%d set on=%d off=%d days=%d"), ch + 1, onMin, offMin, config.sched_days[ch]);
     Config::saveConfig();
     reportSchedule();
 }
@@ -367,6 +392,7 @@ void DC1::scheduleClear(uint8_t ch)
     }
     config.sched_on[ch] = SCHED_DISABLED;
     config.sched_off[ch] = SCHED_DISABLED;
+    config.sched_days[ch] = 0;
     schedLastMinute[ch] = -1;
     Debug::AddInfo(PSTR("Schedule ch%d cleared"), ch + 1);
     Config::saveConfig();
@@ -375,13 +401,14 @@ void DC1::scheduleClear(uint8_t ch)
 
 void DC1::reportSchedule()
 {
-    char msg[200];
+    char msg[256];
     char *p = msg;
     p += sprintf(p, "{");
     for (uint8_t ch = 0; ch < channels; ch++)
     {
         uint32_t on = (ch < config.sched_on_count) ? config.sched_on[ch] : SCHED_DISABLED;
         uint32_t off = (ch < config.sched_off_count) ? config.sched_off[ch] : SCHED_DISABLED;
+        uint8_t days = (ch < config.sched_days_count) ? config.sched_days[ch] : 0;
         if (on != SCHED_DISABLED)
         {
             p += sprintf(p, "%s\"%d\":{\"on\":\"%02d:%02d\",\"off\":", ch ? "," : "", ch + 1, on / 60, on % 60);
@@ -392,12 +419,13 @@ void DC1::reportSchedule()
         }
         if (off != SCHED_DISABLED)
         {
-            p += sprintf(p, "\"%02d:%02d\"}", off / 60, off % 60);
+            p += sprintf(p, "\"%02d:%02d\",", off / 60, off % 60);
         }
         else
         {
-            p += sprintf(p, "\"--\"}");
+            p += sprintf(p, "\"--\",");
         }
+        p += sprintf(p, "\"days\":%d}", days);
     }
     p += sprintf(p, "}");
     Mqtt::publish(Mqtt::getStatTopic(F("schedule")), msg);
@@ -411,8 +439,8 @@ void DC1::scheduleCmd(char *payload)
         return;
     }
     uint8_t ch = 0;
-    int onM = -1, offM = -1;
-    int n = sscanf(payload, "%hhu %d %d", &ch, &onM, &offM);
+    int onM = -1, offM = -1, daysM = -1;
+    int n = sscanf(payload, "%hhu %d %d %d", &ch, &onM, &offM, &daysM);
     if (n < 1 || ch < 1 || ch > channels)
     {
         reportSchedule();
@@ -423,6 +451,7 @@ void DC1::scheduleCmd(char *payload)
         reportSchedule(); // 只给通道号 = 查询
         return;
     }
+    uint32_t days = (n >= 4 && daysM > 0) ? (uint32_t)daysM : 0;
     if (n >= 3)
     {
         if (onM < 0 && offM < 0)
@@ -431,12 +460,12 @@ void DC1::scheduleCmd(char *payload)
         }
         else
         {
-            scheduleSet(ch - 1, onM, offM);
+            scheduleSet(ch - 1, onM, offM, days);
         }
     }
     else
     {
-        scheduleSet(ch - 1, onM, -1); // 只设置开启时间
+        scheduleSet(ch - 1, onM, -1, days); // 只设置开启时间
     }
 }
 #pragma endregion
@@ -699,7 +728,17 @@ void DC1::httpHtml(ESP8266WebServer *server)
              "&nbsp;&nbsp;"
              "<input type='number' id='soff_m' min='0' max='59' style='width:62px;border:1px solid #ddd;border-radius:6px;padding:5px;font-size:14px' value='0'><span style='font-size:13px;color:#666'>&nbsp;分</span>"
              "</div>"
-             "<div style='font-size:12px;color:#aaa;margin-top:10px;line-height:1.5'>每天到点自动开启/关闭开关（可随时取消）</div>"
+             "<div style='text-align:left;font-size:13px;color:#888;margin:14px 0 6px'>生效星期（不选=每天）</div>"
+             "<div style='text-align:left'>"
+             "<button type='button' id='sd0' onclick=\"sdayToggle(0)\" style='width:25px;height:25px;border-radius:12px;border:none;background:#eee;color:#888;font-size:11px;margin-right:4px'>一</button>"
+             "<button type='button' id='sd1' onclick=\"sdayToggle(1)\" style='width:25px;height:25px;border-radius:12px;border:none;background:#eee;color:#888;font-size:11px;margin-right:4px'>二</button>"
+             "<button type='button' id='sd2' onclick=\"sdayToggle(2)\" style='width:25px;height:25px;border-radius:12px;border:none;background:#eee;color:#888;font-size:11px;margin-right:4px'>三</button>"
+             "<button type='button' id='sd3' onclick=\"sdayToggle(3)\" style='width:25px;height:25px;border-radius:12px;border:none;background:#eee;color:#888;font-size:11px;margin-right:4px'>四</button>"
+             "<button type='button' id='sd4' onclick=\"sdayToggle(4)\" style='width:25px;height:25px;border-radius:12px;border:none;background:#eee;color:#888;font-size:11px;margin-right:4px'>五</button>"
+             "<button type='button' id='sd5' onclick=\"sdayToggle(5)\" style='width:25px;height:25px;border-radius:12px;border:none;background:#eee;color:#888;font-size:11px;margin-right:4px'>六</button>"
+             "<button type='button' id='sd6' onclick=\"sdayToggle(6)\" style='width:25px;height:25px;border-radius:12px;border:none;background:#eee;color:#888;font-size:11px'>日</button>"
+             "</div>"
+             "<div style='font-size:12px;color:#aaa;margin-top:10px;line-height:1.5'>到点自动开启/关闭开关（可随时取消）</div>"
              "<div style='margin-top:16px;display:flex;justify-content:space-between'>"
              "<button type='button' onclick=\"schedClearModal()\" style='background:none;border:none;color:#7c5cbf;font-size:14px;padding:4px'>清除定时</button>"
              "<button type='button' onclick=\"closeSchedModal()\" style='background:none;border:none;color:#7c5cbf;font-size:14px;padding:4px'>取消</button>"
@@ -783,10 +822,12 @@ void DC1::httpHtml(ESP8266WebServer *server)
              "function closeModal(){id('modal').style.display='none'}"
              "function timerStartModal(){var h=parseInt(id('mh').value)||0;var m=parseInt(id('mm').value)||0;var sec=h*3600+m*60;if(sec<=0){toast('请输入倒计时时长',3000,false);return}var tgt=id('mrad_on').checked?'on':'off';ajaxPost('/dc1_setting','timer_ch='+curCh+'&timer_seconds='+sec+'&timer_target='+tgt);closeModal()}"
              "function timerCancelModal(){ajaxPost('/dc1_setting','timer_ch='+curCh+'&timer_seconds=0');closeModal()}"
-             "function showSchedModal(n){curCh=n;id('stitle').innerHTML='定时任务·开关'+n;var s=schedInit[n-1];id('son_h').value=s[0]>=0?s[0]:7;id('son_m').value=s[1]>=0?s[1]:0;id('soff_h').value=s[2]>=0?s[2]:21;id('soff_m').value=s[3]>=0?s[3]:0;id('modal2').style.display='flex'}"
+             "var sdaySel=[0,0,0,0,0,0,0];function sdayToggle(n){if(sdaySel[n]){sdaySel[n]=0;id('sd'+n).style.background='#eee';id('sd'+n).style.color='#888'}else{sdaySel[n]=1;id('sd'+n).style.background='#7c5cbf';id('sd'+n).style.color='#fff'}}"
+             "function schedDaysMask(){var m=0;for(var i=0;i<7;i++){if(sdaySel[i])m|=1<<i}return m}"
+             "function showSchedModal(n){curCh=n;id('stitle').innerHTML='定时任务·开关'+n;var s=schedInit[n-1];id('son_h').value=s[0]>=0?s[0]:7;id('son_m').value=s[1]>=0?s[1]:0;id('soff_h').value=s[2]>=0?s[2]:21;id('soff_m').value=s[3]>=0?s[3]:0;var d=s[4]||0;for(var i=0;i<7;i++){sdaySel[i]=(d>>i)&1;if(sdaySel[i]){id('sd'+i).style.background='#7c5cbf';id('sd'+i).style.color='#fff'}else{id('sd'+i).style.background='#eee';id('sd'+i).style.color='#888'}}id('modal2').style.display='flex'}"
              "function closeSchedModal(){id('modal2').style.display='none'}"
-             "function schedSaveModal(){var onh=id('son_h').value,onm=id('son_m').value,offh=id('soff_h').value,offm=id('soff_m').value;ajaxPost('/dc1_setting','sched_ch='+curCh+'&sched_on_hh='+onh+'&sched_on_mm='+onm+'&sched_off_hh='+offh+'&sched_off_mm='+offm,function(){var s=schedInit[curCh-1];s[0]=parseInt(onh);s[1]=parseInt(onm);s[2]=parseInt(offh);s[3]=parseInt(offm)});closeSchedModal()}"
-             "function schedClearModal(){ajaxPost('/dc1_setting','sched_ch='+curCh+'&sched_clear=1',function(){var s=schedInit[curCh-1];s[0]=-1;s[1]=-1;s[2]=-1;s[3]=-1});closeSchedModal()}"));
+             "function schedSaveModal(){var onh=id('son_h').value,onm=id('son_m').value,offh=id('soff_h').value,offm=id('soff_m').value,days=schedDaysMask();ajaxPost('/dc1_setting','sched_ch='+curCh+'&sched_on_hh='+onh+'&sched_on_mm='+onm+'&sched_off_hh='+offh+'&sched_off_mm='+offm+'&sched_days='+days,function(){var s=schedInit[curCh-1];s[0]=parseInt(onh);s[1]=parseInt(onm);s[2]=parseInt(offh);s[3]=parseInt(offm);s[4]=days});closeSchedModal()}"
+             "function schedClearModal(){ajaxPost('/dc1_setting','sched_ch='+curCh+'&sched_clear=1',function(){var s=schedInit[curCh-1];s[0]=-1;s[1]=-1;s[2]=-1;s[3]=-1;s[4]=0});closeSchedModal()}"));
 
     snprintf_P(tmpData, sizeof(tmpData),
                PSTR("setRadioValue('power_on_state', '%d');"
@@ -797,25 +838,29 @@ void DC1::httpHtml(ESP8266WebServer *server)
                config.power_on_state, config.power_mode, config.logo_led, config.wifi_led, config.sub_kinkage);
     server->sendContent_P(tmpData);
 
-    // 定时任务初始值: [on_h,on_m,off_h,off_m] per channel, -1=禁用
+    // 定时任务初始值: [on_h,on_m,off_h,off_m,days] per channel, -1=禁用
     snprintf_P(tmpData, sizeof(tmpData),
-               PSTR("var schedInit=[[%d,%d,%d,%d],[%d,%d,%d,%d],[%d,%d,%d,%d],[%d,%d,%d,%d]];"),
+               PSTR("var schedInit=[[%d,%d,%d,%d,%d],[%d,%d,%d,%d,%d],[%d,%d,%d,%d,%d],[%d,%d,%d,%d,%d]];"),
                (config.sched_on_count > 0 && config.sched_on[0] != 0xFFFFFFFF) ? (int)(config.sched_on[0] / 60) : -1,
                (config.sched_on_count > 0 && config.sched_on[0] != 0xFFFFFFFF) ? (int)(config.sched_on[0] % 60) : -1,
                (config.sched_off_count > 0 && config.sched_off[0] != 0xFFFFFFFF) ? (int)(config.sched_off[0] / 60) : -1,
                (config.sched_off_count > 0 && config.sched_off[0] != 0xFFFFFFFF) ? (int)(config.sched_off[0] % 60) : -1,
+               (config.sched_days_count > 0) ? (int)config.sched_days[0] : 0,
                (config.sched_on_count > 1 && config.sched_on[1] != 0xFFFFFFFF) ? (int)(config.sched_on[1] / 60) : -1,
                (config.sched_on_count > 1 && config.sched_on[1] != 0xFFFFFFFF) ? (int)(config.sched_on[1] % 60) : -1,
                (config.sched_off_count > 1 && config.sched_off[1] != 0xFFFFFFFF) ? (int)(config.sched_off[1] / 60) : -1,
                (config.sched_off_count > 1 && config.sched_off[1] != 0xFFFFFFFF) ? (int)(config.sched_off[1] % 60) : -1,
+               (config.sched_days_count > 1) ? (int)config.sched_days[1] : 0,
                (config.sched_on_count > 2 && config.sched_on[2] != 0xFFFFFFFF) ? (int)(config.sched_on[2] / 60) : -1,
                (config.sched_on_count > 2 && config.sched_on[2] != 0xFFFFFFFF) ? (int)(config.sched_on[2] % 60) : -1,
                (config.sched_off_count > 2 && config.sched_off[2] != 0xFFFFFFFF) ? (int)(config.sched_off[2] / 60) : -1,
                (config.sched_off_count > 2 && config.sched_off[2] != 0xFFFFFFFF) ? (int)(config.sched_off[2] % 60) : -1,
+               (config.sched_days_count > 2) ? (int)config.sched_days[2] : 0,
                (config.sched_on_count > 3 && config.sched_on[3] != 0xFFFFFFFF) ? (int)(config.sched_on[3] / 60) : -1,
                (config.sched_on_count > 3 && config.sched_on[3] != 0xFFFFFFFF) ? (int)(config.sched_on[3] % 60) : -1,
                (config.sched_off_count > 3 && config.sched_off[3] != 0xFFFFFFFF) ? (int)(config.sched_off[3] / 60) : -1,
-               (config.sched_off_count > 3 && config.sched_off[3] != 0xFFFFFFFF) ? (int)(config.sched_off[3] % 60) : -1);
+               (config.sched_off_count > 3 && config.sched_off[3] != 0xFFFFFFFF) ? (int)(config.sched_off[3] % 60) : -1,
+               (config.sched_days_count > 3) ? (int)config.sched_days[3] : 0);
     server->sendContent_P(tmpData);
 
     server->sendContent_P(PSTR("</script>"));
@@ -896,6 +941,7 @@ void DC1::httpSetting(ESP8266WebServer *server)
             else
             {
                 int onM = -1, offM = -1;
+                uint32_t days = 0;
                 if (server->hasArg(F("sched_on_hh")))
                 {
                     onM = server->arg(F("sched_on_hh")).toInt() * 60 + server->arg(F("sched_on_mm")).toInt();
@@ -904,7 +950,11 @@ void DC1::httpSetting(ESP8266WebServer *server)
                 {
                     offM = server->arg(F("sched_off_hh")).toInt() * 60 + server->arg(F("sched_off_mm")).toInt();
                 }
-                scheduleSet(schedCh - 1, onM, offM);
+                if (server->hasArg(F("sched_days")))
+                {
+                    days = server->arg(F("sched_days")).toInt();
+                }
+                scheduleSet(schedCh - 1, onM, offM, days);
             }
         }
     }

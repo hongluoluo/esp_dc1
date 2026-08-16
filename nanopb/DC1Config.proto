@@ -32,4 +32,7 @@ message DC1ConfigMessage {
     repeated uint32 sched_on = 33 [(nanopb).max_count = 4, (nanopb).int_size = IS_32];
     repeated uint32 sched_off = 34 [(nanopb).max_count = 4, (nanopb).int_size = IS_32];
 
+    // 定时任务生效星期: bit0=周一..bit6=周日, 0=每天(默认, 向后兼容)
+    repeated uint32 sched_days = 35 [(nanopb).max_count = 4, (nanopb).int_size = IS_8];
+
 }

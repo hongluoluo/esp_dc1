@@ -41,14 +41,16 @@ typedef struct _DC1ConfigMessage {
     uint32_t sched_on[4];
     pb_size_t sched_off_count;
     uint32_t sched_off[4];
+    pb_size_t sched_days_count;
+    uint8_t sched_days[4];
 /* @@protoc_insertion_point(struct:DC1ConfigMessage) */
 } DC1ConfigMessage;
 
 /* Struct field encoding specification for nanopb */
-extern const pb_field_t DC1ConfigMessage_fields[24];
+extern const pb_field_t DC1ConfigMessage_fields[26];
 
 /* Maximum encoded size of messages (where known) */
-#define DC1ConfigMessage_size                    193
+#define DC1ConfigMessage_size                    203
 
 /* Message IDs (where set with "msgid" option) */
 #ifdef PB_MSGID

@@ -10,7 +10,7 @@
 
 
 
-const pb_field_t DC1ConfigMessage_fields[24] = {
+const pb_field_t DC1ConfigMessage_fields[26] = {
     PB_FIELD(  1, UINT32  , SINGULAR, STATIC  , FIRST, DC1ConfigMessage, last_state, last_state, 0),
     PB_FIELD(  2, UINT32  , SINGULAR, STATIC  , OTHER, DC1ConfigMessage, power_on_state, last_state, 0),
     PB_FIELD(  3, UINT32  , SINGULAR, STATIC  , OTHER, DC1ConfigMessage, power_mode, power_on_state, 0),
@@ -32,6 +32,7 @@ const pb_field_t DC1ConfigMessage_fields[24] = {
     PB_FIELD( 32, UINT32  , REPEATED, STATIC  , OTHER, DC1ConfigMessage, timer_target, timer_remaining, 0),
     PB_FIELD( 33, UINT32  , REPEATED, STATIC  , OTHER, DC1ConfigMessage, sched_on, timer_target, 0),
     PB_FIELD( 34, UINT32  , REPEATED, STATIC  , OTHER, DC1ConfigMessage, sched_off, sched_on, 0),
+    PB_FIELD( 35, UINT32  , REPEATED, STATIC  , OTHER, DC1ConfigMessage, sched_days, sched_off, 0),
     PB_LAST_FIELD
 };
 
