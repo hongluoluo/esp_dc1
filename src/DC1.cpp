@@ -375,6 +375,20 @@ void DC1::scheduleSet(uint8_t ch, int32_t onMin, int32_t offMin, uint32_t days)
     {
         return;
     }
+    // 补齐中间从未设置过的通道：nanopb 未赋值的数组元素是 0，而 0 是合法时间(00:00)，
+    // 若直接设置靠后的通道，前面这些 0 会导致每天 0 点被误触发。
+    for (uint8_t i = config.sched_on_count; i < ch; i++)
+    {
+        config.sched_on[i] = SCHED_DISABLED;
+    }
+    for (uint8_t i = config.sched_off_count; i < ch; i++)
+    {
+        config.sched_off[i] = SCHED_DISABLED;
+    }
+    for (uint8_t i = config.sched_days_count; i < ch; i++)
+    {
+        config.sched_days[i] = 0;
+    }
     config.sched_on[ch] = (onMin >= 0) ? (uint32_t)onMin : SCHED_DISABLED;
     config.sched_off[ch] = (offMin >= 0) ? (uint32_t)offMin : SCHED_DISABLED;
     config.sched_days[ch] = (uint8_t)(days & 0x7F);
@@ -851,11 +865,11 @@ String DC1::httpGetStatus(ESP8266WebServer *server)
         }
         else if (on != 0xFFFFFFFF)
         {
-            snprintf_P(buf, sizeof(buf), PSTR("%02d:%02d-"), on / 60, on % 60);
+            snprintf_P(buf, sizeof(buf), PSTR("%02d:%02d开"), on / 60, on % 60);
         }
         else if (off != 0xFFFFFFFF)
         {
-            snprintf_P(buf, sizeof(buf), PSTR("-%02d:%02d"), off / 60, off % 60);
+            snprintf_P(buf, sizeof(buf), PSTR("%02d:%02d关"), off / 60, off % 60);
         }
         else
         {
@@ -942,13 +956,15 @@ void DC1::httpHtml(ESP8266WebServer *server)
              "<div id='modal2' style='display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:99;align-items:center;justify-content:center' onclick=\"if(event.target==this){closeSchedModal()}\">"
              "<div style='background:#fff;border-radius:14px;padding:20px 24px;width:280px;max-width:86%;text-align:center'>"
              "<div id='stitle' style='font-weight:bold;font-size:17px;margin-bottom:14px'>定时任务·开关1</div>"
-             "<div style='text-align:left;font-size:13px;color:#888;margin-bottom:6px'>开启时间</div>"
+             "<div style='text-align:left;font-size:13px;color:#888;margin-bottom:6px'>开启时间"
+             "<span id='son_sw' onclick='senTog(0)' style='float:right;width:36px;height:20px;border-radius:10px;background:#7c5cbf;position:relative;cursor:pointer'><i id='son_dot' style='position:absolute;top:2px;right:3px;width:16px;height:16px;border-radius:50%;background:#fff'></i></span></div>"
              "<div style='text-align:left'>"
              "<input type='number' id='son_h' min='0' max='23' style='width:62px;border:1px solid #ddd;border-radius:6px;padding:5px;font-size:14px' value='7'><span style='font-size:13px;color:#666'>&nbsp;时</span>"
              "&nbsp;&nbsp;"
              "<input type='number' id='son_m' min='0' max='59' style='width:62px;border:1px solid #ddd;border-radius:6px;padding:5px;font-size:14px' value='0'><span style='font-size:13px;color:#666'>&nbsp;分</span>"
              "</div>"
-             "<div style='text-align:left;font-size:13px;color:#888;margin:14px 0 6px'>关闭时间</div>"
+             "<div style='text-align:left;font-size:13px;color:#888;margin:14px 0 6px'>关闭时间"
+             "<span id='soff_sw' onclick='senTog(1)' style='float:right;width:36px;height:20px;border-radius:10px;background:#7c5cbf;position:relative;cursor:pointer'><i id='soff_dot' style='position:absolute;top:2px;right:3px;width:16px;height:16px;border-radius:50%;background:#fff'></i></span></div>"
              "<div style='text-align:left'>"
              "<input type='number' id='soff_h' min='0' max='23' style='width:62px;border:1px solid #ddd;border-radius:6px;padding:5px;font-size:14px' value='21'><span style='font-size:13px;color:#666'>&nbsp;时</span>"
              "&nbsp;&nbsp;"
@@ -964,7 +980,7 @@ void DC1::httpHtml(ESP8266WebServer *server)
              "<button type='button' id='sd5' onclick=\"sdayToggle(5)\" style='width:25px;height:25px;border-radius:12px;border:none;background:#eee;color:#888;font-size:11px;margin-right:4px;padding:0;text-align:center;line-height:25px'>六</button>"
              "<button type='button' id='sd6' onclick=\"sdayToggle(6)\" style='width:25px;height:25px;border-radius:12px;border:none;background:#eee;color:#888;font-size:11px;padding:0;text-align:center;line-height:25px'>日</button>"
              "</div>"
-             "<div style='font-size:12px;color:#aaa;margin-top:10px;line-height:1.5'>到点自动开启/关闭开关（可随时取消）</div>"
+             "<div style='font-size:12px;color:#aaa;margin-top:10px;line-height:1.5'>开关可单独启用：关掉某一项则到点不执行该动作</div>"
              "<div style='margin-top:16px;display:flex;justify-content:space-between'>"
              "<button type='button' onclick=\"schedClearModal()\" style='background:none;border:none;color:#7c5cbf;font-size:14px;padding:4px'>清除定时</button>"
              "<button type='button' onclick=\"closeSchedModal()\" style='background:none;border:none;color:#7c5cbf;font-size:14px;padding:4px'>取消</button>"
@@ -1062,11 +1078,11 @@ void DC1::httpHtml(ESP8266WebServer *server)
              "function closeModal(){id('modal').style.display='none'}"
              "function timerStartModal(){var h=parseInt(id('mh').value)||0;var m=parseInt(id('mm').value)||0;var sec=h*3600+m*60;if(sec<=0){toast('请输入倒计时时长',3000,false);return}var tgt=id('mrad_on').checked?'on':'off';ajaxPost('/dc1_setting','timer_ch='+curCh+'&timer_seconds='+sec+'&timer_target='+tgt);closeModal()}"
              "function timerCancelModal(){ajaxPost('/dc1_setting','timer_ch='+curCh+'&timer_seconds=0');closeModal()}"
-             "var sdaySel=[0,0,0,0,0,0,0];function sdayToggle(n){if(sdaySel[n]){sdaySel[n]=0;id('sd'+n).style.background='#eee';id('sd'+n).style.color='#888'}else{sdaySel[n]=1;id('sd'+n).style.background='#7c5cbf';id('sd'+n).style.color='#fff'}}"
+             "var sdaySel=[0,0,0,0,0,0,0],sOnEn=1,sOffEn=1;function senOne(w,dt,v){var a=id(w),b=id(dt);a.style.background=v?'#7c5cbf':'#ccc';b.style.left=v?'auto':'3px';b.style.right=v?'3px':'auto'}function senUpd(){senOne('son_sw','son_dot',sOnEn);senOne('soff_sw','soff_dot',sOffEn)}function senTog(k){if(k){sOffEn=sOffEn?0:1}else{sOnEn=sOnEn?0:1}senUpd()}function sdayToggle(n){if(sdaySel[n]){sdaySel[n]=0;id('sd'+n).style.background='#eee';id('sd'+n).style.color='#888'}else{sdaySel[n]=1;id('sd'+n).style.background='#7c5cbf';id('sd'+n).style.color='#fff'}}"
              "function schedDaysMask(){var m=0;for(var i=0;i<7;i++){if(sdaySel[i])m|=1<<i}return m}"
-             "function showSchedModal(n){curCh=n;id('stitle').innerHTML='定时任务·开关'+n;var s=schedInit[n-1];id('son_h').value=s[0]>=0?s[0]:7;id('son_m').value=s[1]>=0?s[1]:0;id('soff_h').value=s[2]>=0?s[2]:21;id('soff_m').value=s[3]>=0?s[3]:0;var d=s[4]||0;for(var i=0;i<7;i++){sdaySel[i]=(d>>i)&1;if(sdaySel[i]){id('sd'+i).style.background='#7c5cbf';id('sd'+i).style.color='#fff'}else{id('sd'+i).style.background='#eee';id('sd'+i).style.color='#888'}}id('modal2').style.display='flex'}"
+             "function showSchedModal(n){curCh=n;id('stitle').innerHTML='定时任务·开关'+n;var s=schedInit[n-1];sOnEn=s[0]>=0?1:0;sOffEn=s[2]>=0?1:0;senUpd();id('son_h').value=s[0]>=0?s[0]:7;id('son_m').value=s[1]>=0?s[1]:0;id('soff_h').value=s[2]>=0?s[2]:21;id('soff_m').value=s[3]>=0?s[3]:0;var d=s[4]||0;for(var i=0;i<7;i++){sdaySel[i]=(d>>i)&1;if(sdaySel[i]){id('sd'+i).style.background='#7c5cbf';id('sd'+i).style.color='#fff'}else{id('sd'+i).style.background='#eee';id('sd'+i).style.color='#888'}}id('modal2').style.display='flex'}"
              "function closeSchedModal(){id('modal2').style.display='none'}"
-             "function schedSaveModal(){var onh=id('son_h').value,onm=id('son_m').value,offh=id('soff_h').value,offm=id('soff_m').value,days=schedDaysMask();ajaxPost('/dc1_setting','sched_ch='+curCh+'&sched_on_hh='+onh+'&sched_on_mm='+onm+'&sched_off_hh='+offh+'&sched_off_mm='+offm+'&sched_days='+days,function(){var s=schedInit[curCh-1];s[0]=parseInt(onh);s[1]=parseInt(onm);s[2]=parseInt(offh);s[3]=parseInt(offm);s[4]=days});closeSchedModal()}"
+             "function schedSaveModal(){var onh=id('son_h').value,onm=id('son_m').value,offh=id('soff_h').value,offm=id('soff_m').value,days=schedDaysMask();ajaxPost('/dc1_setting','sched_ch='+curCh+'&sched_on_en='+sOnEn+'&sched_off_en='+sOffEn+'&sched_on_hh='+onh+'&sched_on_mm='+onm+'&sched_off_hh='+offh+'&sched_off_mm='+offm+'&sched_days='+days,function(){var s=schedInit[curCh-1];s[0]=sOnEn?parseInt(onh):-1;s[1]=sOnEn?parseInt(onm):-1;s[2]=sOffEn?parseInt(offh):-1;s[3]=sOffEn?parseInt(offm):-1;s[4]=days});closeSchedModal()}"
              "function schedClearModal(){ajaxPost('/dc1_setting','sched_ch='+curCh+'&sched_clear=1',function(){var s=schedInit[curCh-1];s[0]=-1;s[1]=-1;s[2]=-1;s[3]=-1;s[4]=0});closeSchedModal()}"
              "function loadLog(){ajaxPost('/log','n=30&ch='+id('logch').value+'&act='+id('logact').value,function(r){var d=r.data;if(!d||!d.rows||d.rows.length==0){id('loglist').innerHTML='暂无记录';return true}var h='共'+d.total+'条（显示最近'+d.rows.length+'条）';h+=\"<table style='width:100%;font-size:12px;border-collapse:collapse'>\";for(var i=0;i<d.rows.length;i++){var x=d.rows[i];h+=\"<tr><td style='padding:2px 4px;border-bottom:1px solid #eee'>\"+x[0]+\"</td><td style='padding:2px 4px;border-bottom:1px solid #eee'>开关\"+x[1]+\"</td><td style='padding:2px 4px;border-bottom:1px solid #eee'>\"+(x[2]=='on'?'开启':'关闭')+\"</td><td style='padding:2px 4px;border-bottom:1px solid #eee'>\"+x[3]+\"</td></tr>\"}h+=\"</table>\";id('loglist').innerHTML=h;return true});return true}"));
 
@@ -1141,15 +1157,40 @@ void DC1::httpSetting(ESP8266WebServer *server)
         server->sendContent_P(PSTR("}}"));
         return;
     }
-    config.power_on_state = server->arg(F("power_on_state")).toInt();
-    config.power_mode = server->arg(F("power_mode")).toInt();
-    config.logo_led = server->arg(F("logo_led")).toInt();
-    config.wifi_led = server->arg(F("wifi_led")).toInt();
-    config.sub_kinkage = server->arg(F("sub_kinkage")).toInt();
-
-    config.report_interval = server->arg(F("report_interval")).toInt();
-    config.energy_power_delta = server->arg(F("energy_power_delta")).toInt();
-    config.energy_max_power = server->arg(F("energy_max_power")).toInt();
+    // 只在表单确实提交了该字段时才写入：倒计时/定时任务/重置电量等按钮只POST自己的参数，
+    // 无条件赋值会把其它设置全部清成0。
+    if (server->hasArg(F("power_on_state")))
+    {
+        config.power_on_state = server->arg(F("power_on_state")).toInt();
+    }
+    if (server->hasArg(F("power_mode")))
+    {
+        config.power_mode = server->arg(F("power_mode")).toInt();
+    }
+    if (server->hasArg(F("logo_led")))
+    {
+        config.logo_led = server->arg(F("logo_led")).toInt();
+    }
+    if (server->hasArg(F("wifi_led")))
+    {
+        config.wifi_led = server->arg(F("wifi_led")).toInt();
+    }
+    if (server->hasArg(F("sub_kinkage")))
+    {
+        config.sub_kinkage = server->arg(F("sub_kinkage")).toInt();
+    }
+    if (server->hasArg(F("report_interval")))
+    {
+        config.report_interval = server->arg(F("report_interval")).toInt();
+    }
+    if (server->hasArg(F("energy_power_delta")))
+    {
+        config.energy_power_delta = server->arg(F("energy_power_delta")).toInt();
+    }
+    if (server->hasArg(F("energy_max_power")))
+    {
+        config.energy_max_power = server->arg(F("energy_max_power")).toInt();
+    }
 
     // 倒计时: timer_ch=1..4, timer_seconds=剩余秒数(0=取消), timer_target=on|off
     if (server->hasArg(F("timer_ch")))
@@ -1183,11 +1224,14 @@ void DC1::httpSetting(ESP8266WebServer *server)
             {
                 int onM = -1, offM = -1;
                 uint32_t days = 0;
-                if (server->hasArg(F("sched_on_hh")))
+                // 开启/关闭可各自单独启用: sched_on_en / sched_off_en = 0 表示该项不执行
+                if (server->hasArg(F("sched_on_hh")) &&
+                    (!server->hasArg(F("sched_on_en")) || server->arg(F("sched_on_en")).toInt() != 0))
                 {
                     onM = server->arg(F("sched_on_hh")).toInt() * 60 + server->arg(F("sched_on_mm")).toInt();
                 }
-                if (server->hasArg(F("sched_off_hh")))
+                if (server->hasArg(F("sched_off_hh")) &&
+                    (!server->hasArg(F("sched_off_en")) || server->arg(F("sched_off_en")).toInt() != 0))
                 {
                     offM = server->arg(F("sched_off_hh")).toInt() * 60 + server->arg(F("sched_off_mm")).toInt();
                 }
