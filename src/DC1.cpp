@@ -1352,7 +1352,15 @@ void DC1::switchRelay(uint8_t ch, bool isOn, bool isSave, uint8_t src)
     {
         if (!bitRead(lastState, 0) && isOn && config.sub_kinkage != 0)
         {
-            if (config.sub_kinkage == 1 || !isSave)
+            // 定时任务/倒计时属于"到点自动执行"：若被"总关禁开"静默拦下(isOn=false)，
+            // 用户会以为定时根本没生效。这类来源改为一并打开总开关，保证动作真正执行。
+            // isSave=false 传给总开关：只合闸、不恢复其它子开关，避免只设了某个通道的定时
+            // 却把之前断电的通道也一起带上。
+            if (src == SRC_SCHED || src == SRC_TIMER)
+            {
+                switchRelay(0, true, false, src);
+            }
+            else if (config.sub_kinkage == 1 || !isSave)
             {
                 isOn = false;
             }
