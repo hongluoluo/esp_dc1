@@ -199,7 +199,7 @@ void Http::handleRoot()
 
     snprintf_P(tmpData, sizeof(tmpData),
                PSTR("<tr><td>NTP服务器</td><td>"
-                    "<input type='text' name='ntp' style='width:150px' value='%s'> 建议在获取时间失败时才填写"
+                    "<input type='text' name='ntp' style='width:150px' value='%s'> 留空用默认，可填IP或域名"
                     "</td></tr>"),
                globalConfig.wifi.ntp);
     server->sendContent_P(tmpData);

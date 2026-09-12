@@ -145,6 +145,16 @@ void Rtc::breakTime(uint32_t time_input, TIME_T &tm)
 
 void Rtc::loop()
 {
+    // 迟迟同步不到时间时重新初始化SNTP(主循环上下文，可安全做DNS解析)
+    if (bitRead(operationFlag, 1))
+    {
+        bitClear(operationFlag, 1);
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            Debug::AddInfo(PSTR("NTP: retry (no time for 90s)"));
+            init();
+        }
+    }
     if (bitRead(operationFlag, 0))
     {
         bitClear(operationFlag, 0);
@@ -168,34 +178,87 @@ void Rtc::getNtp()
 
 void Rtc::perSecondDo()
 {
-    bool isAdd = false;
-    if (utcTime == 0 || perSecond % 600 == 0)
-    {
-        bitSet(operationFlag, 0);
-    }
+    static uint16_t ntpFailSec = 0;
     if (utcTime > 0)
     {
+        ntpFailSec = 0;
         utcTime += 1;
         breakTime(utcTime, rtcTime);
-        //Debug::AddInfo(PSTR("Ticker: %04d-%02d-%02d %02d:%02d:%02d"), rtcTime.year, rtcTime.month, rtcTime.day_of_month, rtcTime.hour, rtcTime.minute, rtcTime.second);
+        // 每10分钟重新校时一次
+        if (perSecond % 600 == 0)
+        {
+            bitSet(operationFlag, 0);
+        }
+    }
+    else
+    {
+        // 时间尚未同步：每秒尝试读取SNTP结果
+        bitSet(operationFlag, 0);
+        // lwip的SNTP请求失败后默认要等SNTP_UPDATE_DELAY(约1小时)才会重试，
+        // 这里90秒仍未同步就请求重新初始化(置标志，由主循环执行，
+        // 因为本函数在Ticker回调中，不能做DNS解析这类阻塞操作)。
+        if (ntpFailSec >= 90)
+        {
+            ntpFailSec = 0;
+            bitSet(operationFlag, 1);
+        }
+        ntpFailSec++;
     }
 }
 
 void Rtc::init()
 {
+    // 传给lwip的服务器名必须是常驻字符串(lwip只保存指针)
+    static char ntpServer[40] = {0};
+    static bool ntpIsIp = false;
+    static uint8_t dnsTry = 0;
+
     sntp_stop();
+
+    // 默认服务器一律用IP：lwip的SNTP若用域名，在设备DNS尚未就绪时首个请求就会失败，
+    // 而失败后要等 SNTP_UPDATE_DELAY(约1小时) 才重试，导致长时间取不到时间。
+    // 这里先铺好IP服务器，保证任何情况下都有一路可达的校时通道。
+    sntp_setservername(0, (char *)"120.25.115.20");
+    sntp_setservername(1, (char *)"203.107.6.88");
+    sntp_setservername(2, (char *)"ntp3.aliyun.com");
+
     if (globalConfig.wifi.ntp[0] != '\0')
     {
-        Debug::AddInfo(PSTR("NTP Server: %s"), globalConfig.wifi.ntp);
-        sntp_setservername(0, globalConfig.wifi.ntp);
+        // 用户自定义服务器：优先解析为IP再交给SNTP
+        if (strcmp(ntpServer, globalConfig.wifi.ntp) != 0)
+        {
+            strncpy(ntpServer, globalConfig.wifi.ntp, sizeof(ntpServer) - 1);
+            ntpServer[sizeof(ntpServer) - 1] = '\0';
+            ntpIsIp = false;
+            dnsTry = 0;
+        }
+        // 最多解析3次：DNS未就绪时避免每次重试都长时间阻塞
+        if (!ntpIsIp && dnsTry < 3 && WiFi.status() == WL_CONNECTED)
+        {
+            IPAddress ip;
+            if (WiFi.hostByName(ntpServer, ip))
+            {
+                strncpy(ntpServer, ip.toString().c_str(), sizeof(ntpServer) - 1);
+                ntpServer[sizeof(ntpServer) - 1] = '\0';
+                ntpIsIp = true;
+                Debug::AddInfo(PSTR("NTP: %s -> %s"), globalConfig.wifi.ntp, ntpServer);
+            }
+            else
+            {
+                dnsTry++;
+                Debug::AddInfo(PSTR("NTP: %s DNS fail, use default IP"), globalConfig.wifi.ntp);
+            }
+        }
+        if (ntpIsIp)
+        {
+            sntp_setservername(0, ntpServer);
+        }
     }
     else
     {
-        Debug::AddInfo(PSTR("NTP Server: default"));
-        sntp_setservername(0, (char *)"120.25.115.20");
-        sntp_setservername(1, (char *)"203.107.6.88");
-        sntp_setservername(2, (char *)"ntp3.aliyun.com");
+        Debug::AddInfo(PSTR("NTP Server: default (IP)"));
     }
+
     sntp_set_timezone(8);
     sntp_init();
     utcTime = 0;
