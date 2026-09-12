@@ -2,9 +2,20 @@
 #include "DC1.h"
 #include "Rtc.h"
 #include "Util.h"
+#include <FS.h>
 #ifdef USE_HOMEKIT
 #include "HomeKit.h"
 #endif
+
+// 开关操作触发源
+#define SRC_KEY 1   // 本机按键
+#define SRC_MQTT 2  // MQTT 指令
+#define SRC_WEB 3   // WEB 页面
+#define SRC_SCHED 4 // 定时任务
+#define SRC_TIMER 5 // 倒计时
+
+#define LOG_FILE "/log.csv"
+#define LOG_MAX_SIZE 102400 // 100KB 触发轮转
 
 #pragma region 继承
 
@@ -58,6 +69,7 @@ void DC1::init()
         }
     }
     energyInit();
+    logInit();
 }
 
 bool DC1::moduleLed()
@@ -155,7 +167,7 @@ void DC1::mqttCallback(char *topic, char *payload, char *cmnd)
         uint8_t ch = cmnd[5] - 49;
         if (ch < channels)
         {
-            switchRelay(ch, (strcmp(payload, "on") == 0 ? true : (strcmp(payload, "off") == 0 ? false : !bitRead(lastState, ch))), true);
+            switchRelay(ch, (strcmp(payload, "on") == 0 ? true : (strcmp(payload, "off") == 0 ? false : !bitRead(lastState, ch))), true, SRC_MQTT);
             return;
         }
     }
@@ -196,7 +208,7 @@ void DC1::timerCheck()
             if (config.timer_remaining[ch] == 0)
             {
                 Debug::AddInfo(PSTR("Timer ch%d expired -> %s"), ch + 1, config.timer_target[ch] ? "ON" : "OFF");
-                switchRelay(ch, config.timer_target[ch] == 1, true);
+                switchRelay(ch, config.timer_target[ch] == 1, true, SRC_TIMER);
                 reportTimer();
                 Config::delaySaveConfig(5);
             }
@@ -344,14 +356,14 @@ void DC1::scheduleCheck()
         {
             schedLastMinute[ch] = nowMin;
             Debug::AddInfo(PSTR("Schedule ch%d ON"), ch + 1);
-            switchRelay(ch, true, true);
+            switchRelay(ch, true, true, SRC_SCHED);
             reportSchedule();
         }
         else if (off != SCHED_DISABLED && nowMin == (uint16_t)off)
         {
             schedLastMinute[ch] = nowMin;
             Debug::AddInfo(PSTR("Schedule ch%d OFF"), ch + 1);
-            switchRelay(ch, false, true);
+            switchRelay(ch, false, true, SRC_SCHED);
             reportSchedule();
         }
     }
@@ -467,6 +479,218 @@ void DC1::scheduleCmd(char *payload)
     {
         scheduleSet(ch - 1, onM, -1, days); // 只设置开启时间
     }
+}
+#pragma endregion
+
+#pragma region 开关记录
+
+static const char *logSrcName(uint8_t src)
+{
+    switch (src)
+    {
+    case SRC_KEY:
+        return "按键";
+    case SRC_MQTT:
+        return "MQTT";
+    case SRC_WEB:
+        return "WEB";
+    case SRC_SCHED:
+        return "定时";
+    case SRC_TIMER:
+        return "倒计时";
+    }
+    return "其他";
+}
+
+void DC1::logInit()
+{
+    if (!SPIFFS.begin())
+    {
+        Debug::AddInfo(PSTR("SPIFFS mount failed, formatting..."));
+        SPIFFS.format();
+        if (!SPIFFS.begin())
+        {
+            Debug::AddError(PSTR("SPIFFS mount failed after format"));
+            logEnabled = false;
+            return;
+        }
+    }
+    FSInfo info;
+    if (SPIFFS.info(info))
+    {
+        Debug::AddInfo(PSTR("SPIFFS ok: total=%u used=%u"), info.totalBytes, info.usedBytes);
+    }
+    logEnabled = true;
+}
+
+void DC1::appendLog(uint8_t ch, bool isOn, uint8_t src)
+{
+    if (!logEnabled)
+    {
+        return;
+    }
+    logCount++;
+    if (logCount % 100 == 0) // 每100次检查容量, 减少文件操作
+    {
+        File cf = SPIFFS.open(LOG_FILE, "r");
+        if (cf)
+        {
+            size_t sz = cf.size();
+            cf.close();
+            if (sz > LOG_MAX_SIZE)
+            {
+                logRotate();
+            }
+        }
+    }
+    File f = SPIFFS.open(LOG_FILE, "a");
+    if (!f)
+    {
+        Debug::AddError(PSTR("log file open failed"));
+        return;
+    }
+    char ts[24];
+    if (Rtc::rtcTime.valid)
+    {
+        snprintf(ts, sizeof(ts), "%04d-%02d-%02d %02d:%02d:%02d",
+                 Rtc::rtcTime.year, Rtc::rtcTime.month, Rtc::rtcTime.day_of_month,
+                 Rtc::rtcTime.hour, Rtc::rtcTime.minute, Rtc::rtcTime.second);
+    }
+    else
+    {
+        strcpy(ts, "--");
+    }
+    f.printf("%s,%d,%s,%s\n", ts, ch + 1, isOn ? "on" : "off", logSrcName(src));
+    f.close();
+}
+
+void DC1::logRotate()
+{
+    File old = SPIFFS.open(LOG_FILE, "r");
+    if (!old)
+    {
+        return;
+    }
+    size_t sz = old.size();
+    old.seek(sz * 40 / 100, SeekSet); // 丢弃最旧的40%
+    while (old.available() && old.read() != '\n')
+    {
+    } // 跳到下一行开头
+    File tmp = SPIFFS.open("/log.tmp", "w");
+    if (!tmp)
+    {
+        old.close();
+        return;
+    }
+    char buf[128];
+    while (old.available())
+    {
+        size_t n = old.readBytesUntil('\n', buf, sizeof(buf) - 1);
+        if (n == 0)
+        {
+            break;
+        }
+        buf[n] = 0;
+        tmp.printf("%s\n", buf);
+    }
+    old.close();
+    tmp.close();
+    SPIFFS.remove(LOG_FILE);
+    SPIFFS.rename("/log.tmp", LOG_FILE);
+    Debug::AddInfo(PSTR("log rotated"));
+}
+
+void DC1::httpLog(ESP8266WebServer *server)
+{
+    int n = server->hasArg(F("n")) ? server->arg(F("n")).toInt() : 30;
+    if (n < 1)
+    {
+        n = 30;
+    }
+    if (n > 50)
+    {
+        n = 50;
+    }
+    uint8_t fch = server->hasArg(F("ch")) ? server->arg(F("ch")).toInt() : 0;
+    String fact = server->hasArg(F("act")) ? server->arg(F("act")) : "";
+
+    static char ring[50][48]; // 环形缓冲(2.4KB)
+    uint8_t head = 0;
+    uint8_t cnt = 0;
+    uint32_t total = 0;
+
+    File f = SPIFFS.open(LOG_FILE, "r");
+    if (f)
+    {
+        char line[64];
+        while (f.available())
+        {
+            int len = f.readBytesUntil('\n', line, sizeof(line) - 1);
+            if (len <= 0)
+            {
+                break;
+            }
+            line[len] = 0;
+            char *p1 = strchr(line, ',');
+            if (!p1)
+            {
+                continue;
+            }
+            int lch = atoi(p1 + 1);
+            char *p2 = strchr(p1 + 1, ',');
+            char *act = p2 ? p2 + 1 : NULL;
+            if (fch > 0 && lch != (int)fch)
+            {
+                continue;
+            }
+            if (fact.length() && (!act || strncmp(act, fact.c_str(), fact.length()) != 0))
+            {
+                continue;
+            }
+            total++;
+            strncpy(ring[head], line, sizeof(ring[0]) - 1);
+            ring[head][sizeof(ring[0]) - 1] = 0;
+            head = (head + 1) % 50;
+            if (cnt < 50)
+            {
+                cnt++;
+            }
+        }
+        f.close();
+    }
+
+    server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server->send_P(200, PSTR("application/json"), "");
+    char buf[160];
+    snprintf_P(buf, sizeof(buf), PSTR("{\"code\":1,\"data\":{\"total\":%u,\"rows\":["), (unsigned)total);
+    server->sendContent(buf);
+
+    int outN = (n < (int)cnt) ? n : (int)cnt;
+    for (int i = 0; i < outN; i++)
+    {
+        int idx = (head - 1 - i + 50) % 50;
+        char *l = ring[idx];
+        char *c1 = strchr(l, ',');
+        if (!c1)
+        {
+            continue;
+        }
+        *c1 = 0;
+        char *c2 = strchr(c1 + 1, ',');
+        if (c2)
+        {
+            *c2 = 0;
+        }
+        char *c3 = c2 ? strchr(c2 + 1, ',') : NULL;
+        if (c3)
+        {
+            *c3 = 0;
+        }
+        snprintf_P(buf, sizeof(buf), PSTR("%s[\"%s\",%s,\"%s\",\"%s\"]"), i ? "," : "", l,
+                   c1 + 1, c2 ? c2 + 1 : "", c3 ? c3 + 1 : "");
+        server->sendContent(buf);
+    }
+    server->sendContent_P(PSTR("]}}"));
 }
 #pragma endregion
 
@@ -591,6 +815,8 @@ void DC1::httpAdd(ESP8266WebServer *server)
     server->on(F("/dc1_do"), std::bind(&DC1::httpDo, this, server));
     server->on(F("/dc1_setting"), std::bind(&DC1::httpSetting, this, server));
     server->on(F("/ha"), std::bind(&DC1::httpHa, this, server));
+    server->on(F("/log"), std::bind(&DC1::httpLog, this, server));
+    server->serveStatic("/log.csv", SPIFFS, LOG_FILE);
 #ifdef USE_HOMEKIT
     server->on(F("/homekit"), std::bind(&homekit_http, server));
 #endif
@@ -757,7 +983,21 @@ void DC1::httpHtml(ESP8266WebServer *server)
              "<br>昨日用电量：<span id='yesterday'>0</span> kWh"
              "<br>&#12288;总用电量：<span id='total'>0</span> kWh"
              "<br>&#12288;开始时间：<span id='starttime'>--</span>"
-             "</div></td></tr></tbody></table>"));
+             "</div></td></tr></tbody></table>"
+
+             "<table class='gridtable'><thead><tr><th colspan='2'>开关记录</th></tr></thead><tbody>"
+             "<tr><td colspan='2' style='text-align:center'>"
+             "<select id='logch'>"
+             "<option value='0'>全部通道</option><option value='1'>开关1</option><option value='2'>开关2</option><option value='3'>开关3</option><option value='4'>开关4</option>"
+             "</select>&nbsp;"
+             "<select id='logact'>"
+             "<option value=''>全部动作</option><option value='on'>仅开启</option><option value='off'>仅关闭</option>"
+             "</select>&nbsp;"
+             "<button type='button' class='btn-info' onclick=\"loadLog()\">查询</button>&nbsp;"
+             "<a href='/log.csv' class='file'>下载CSV</a>"
+             "</td></tr>"
+             "<tr><td colspan='2'><div id='loglist' style='font-size:12px;max-height:280px;overflow-y:auto;text-align:center'>点击\"查询\"加载记录</div></td></tr>"
+             "</tbody></table>"));
 
     server->sendContent_P(
         PSTR("<form method='post' action='/dc1_setting' onsubmit='postform(this);return false'>"
@@ -827,7 +1067,8 @@ void DC1::httpHtml(ESP8266WebServer *server)
              "function showSchedModal(n){curCh=n;id('stitle').innerHTML='定时任务·开关'+n;var s=schedInit[n-1];id('son_h').value=s[0]>=0?s[0]:7;id('son_m').value=s[1]>=0?s[1]:0;id('soff_h').value=s[2]>=0?s[2]:21;id('soff_m').value=s[3]>=0?s[3]:0;var d=s[4]||0;for(var i=0;i<7;i++){sdaySel[i]=(d>>i)&1;if(sdaySel[i]){id('sd'+i).style.background='#7c5cbf';id('sd'+i).style.color='#fff'}else{id('sd'+i).style.background='#eee';id('sd'+i).style.color='#888'}}id('modal2').style.display='flex'}"
              "function closeSchedModal(){id('modal2').style.display='none'}"
              "function schedSaveModal(){var onh=id('son_h').value,onm=id('son_m').value,offh=id('soff_h').value,offm=id('soff_m').value,days=schedDaysMask();ajaxPost('/dc1_setting','sched_ch='+curCh+'&sched_on_hh='+onh+'&sched_on_mm='+onm+'&sched_off_hh='+offh+'&sched_off_mm='+offm+'&sched_days='+days,function(){var s=schedInit[curCh-1];s[0]=parseInt(onh);s[1]=parseInt(onm);s[2]=parseInt(offh);s[3]=parseInt(offm);s[4]=days});closeSchedModal()}"
-             "function schedClearModal(){ajaxPost('/dc1_setting','sched_ch='+curCh+'&sched_clear=1',function(){var s=schedInit[curCh-1];s[0]=-1;s[1]=-1;s[2]=-1;s[3]=-1;s[4]=0});closeSchedModal()}"));
+             "function schedClearModal(){ajaxPost('/dc1_setting','sched_ch='+curCh+'&sched_clear=1',function(){var s=schedInit[curCh-1];s[0]=-1;s[1]=-1;s[2]=-1;s[3]=-1;s[4]=0});closeSchedModal()}"
+             "function loadLog(){ajaxPost('/log','n=30&ch='+id('logch').value+'&act='+id('logact').value,function(r){var d=r.data;if(!d||!d.rows||d.rows.length==0){id('loglist').innerHTML='暂无记录';return true}var h='共'+d.total+'条（显示最近'+d.rows.length+'条）';h+=\"<table style='width:100%;font-size:12px;border-collapse:collapse'>\";for(var i=0;i<d.rows.length;i++){var x=d.rows[i];h+=\"<tr><td style='padding:2px 4px;border-bottom:1px solid #eee'>\"+x[0]+\"</td><td style='padding:2px 4px;border-bottom:1px solid #eee'>开关\"+x[1]+\"</td><td style='padding:2px 4px;border-bottom:1px solid #eee'>\"+(x[2]=='on'?'开启':'关闭')+\"</td><td style='padding:2px 4px;border-bottom:1px solid #eee'>\"+x[3]+\"</td></tr>\"}h+=\"</table>\";id('loglist').innerHTML=h;return true});return true}"));
 
     snprintf_P(tmpData, sizeof(tmpData),
                PSTR("setRadioValue('power_on_state', '%d');"
@@ -881,7 +1122,7 @@ void DC1::httpDo(ESP8266WebServer *server)
         return;
     }
     String str = server->arg(F("do"));
-    switchRelay(ch, (str == "on" ? true : (str == "off" ? false : !bitRead(lastState, ch))));
+    switchRelay(ch, (str == "on" ? true : (str == "off" ? false : !bitRead(lastState, ch))), true, SRC_WEB);
 
     server->setContentLength(CONTENT_LENGTH_UNKNOWN);
     server->send_P(200, PSTR("application/json"), PSTR("{\"code\":1,\"msg\":\"操作成功\",\"data\":{"));
@@ -1055,7 +1296,7 @@ void DC1::logoLed()
     }
 }
 
-void DC1::switchRelay(uint8_t ch, bool isOn, bool isSave)
+void DC1::switchRelay(uint8_t ch, bool isOn, bool isSave, uint8_t src)
 {
     if (ch > channels)
     {
@@ -1073,7 +1314,7 @@ void DC1::switchRelay(uint8_t ch, bool isOn, bool isSave)
             }
             else if (config.sub_kinkage == 2)
             {
-                switchRelay(0, true);
+                switchRelay(0, true, isSave, src);
             }
         }
 
@@ -1083,7 +1324,7 @@ void DC1::switchRelay(uint8_t ch, bool isOn, bool isSave)
             {
                 if (ch2 != ch && bitRead(lastState, ch2))
                 {
-                    switchRelay(ch2, false, isSave);
+                    switchRelay(ch2, false, isSave, src);
                 }
             }
         }
@@ -1100,10 +1341,16 @@ void DC1::switchRelay(uint8_t ch, bool isOn, bool isSave)
         }
     }
 
+    bool stateChanged = (bitRead(lastState, ch) != isOn);
     bitWrite(lastState, ch, isOn);
 
     powerStatTopic[strlen(powerStatTopic) - 1] = ch + 49; // 48 + 1 + ch
     Mqtt::publish(powerStatTopic, isOn ? "on" : "off", globalConfig.mqtt.retain);
+
+    if (stateChanged && src != 0)
+    {
+        appendLog(ch, isOn, src); // 记录开关操作(排除上电初始化)
+    }
 
     if (isSave && config.power_on_state > 0)
     {
@@ -1123,12 +1370,12 @@ void DC1::switchRelay(uint8_t ch, bool isOn, bool isSave)
                 {
                     if (bitRead(config.last_state, ch2))
                     {
-                        switchRelay(ch2, true, false);
+                        switchRelay(ch2, true, false, src);
                     }
                 }
                 else
                 {
-                    switchRelay(ch2, false, false);
+                    switchRelay(ch2, false, false, src);
                 }
             }
         }
@@ -1165,7 +1412,7 @@ void DC1::checkButton(uint8_t ch)
         {
             if (buttonAction[ch] == 1) // 执行短按动作
             {
-                switchRelay(ch, !bitRead(lastState, ch), true);
+                switchRelay(ch, !bitRead(lastState, ch), true, SRC_KEY);
             }
             else if (buttonAction[ch] == 2) // 执行长按动作
             {

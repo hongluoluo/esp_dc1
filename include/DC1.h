@@ -83,6 +83,14 @@ private:
     void scheduleClear(uint8_t ch);
     void reportSchedule();
     void scheduleCmd(char *payload); // MQTT schedule 指令解析
+
+    // 开关记录(SPIFFS CSV)
+    void logInit();   // 挂载SPIFFS+格式化
+    void appendLog(uint8_t ch, bool isOn, uint8_t src);
+    void logRotate(); // 文件过大时轮转
+    void httpLog(ESP8266WebServer *server);
+    bool logEnabled = true;
+    uint32_t logCount = 0; // 本次启动后的记录计数(调试)
     void reportEnergy();
 
 public:
@@ -113,7 +121,7 @@ public:
     void httpHtml(ESP8266WebServer *server);
     String httpGetStatus(ESP8266WebServer *server);
 
-    void switchRelay(uint8_t ch, bool isOn, bool isSave = true);
+    void switchRelay(uint8_t ch, bool isOn, bool isSave = true, uint8_t src = 0);
 };
 
 #endif
